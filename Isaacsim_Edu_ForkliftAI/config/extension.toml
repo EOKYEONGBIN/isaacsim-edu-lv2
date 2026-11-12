@@ -1,0 +1,24 @@
+[package]
+version = "0.2.0"
+category = "UI"
+title = "Isaac Sim Edu Lv2 - Lesson 2 (Forklift AI)"
+description = "AZWELL Isaac Sim advanced training: drive the Lesson 1 forklift to put a pallet on the 2nd rack level while every step (keys, forklift state, pallet pose, driver-camera images with automatic YOLO labels) is recorded for imitation learning."
+authors = ["azwell"]
+readme = "docs/README.md"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "education", "azwell", "forklift", "imitation learning", "yolo", "replicator"]
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+"omni.timeline" = {}
+"omni.physx" = {}
+"omni.replicator.core" = {}
+"omni.kit.pip_archive" = {}  # PIL for writing images
+"omni.kit.viewport.utility" = {}
+"isaacsim.core.experimental.utils" = {}  # add_labels (semantic class labels for the bounding-box annotator)
+"isaacsim.pip.onnx" = {}  # onnxruntime for the YOLO model (the AI's eyes)
+"Isaacsim_Edu_Lv2_Lesson1" = {}  # the forklift scene, its controls and drive state
+
+[[python.module]]
+name = "Isaacsim_Edu_ForkliftAI"

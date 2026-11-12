@@ -1,0 +1,17 @@
+[package]
+version = "0.1.0"
+category = "UI"
+title = "Isaac Sim Edu Lv2"
+icon = "data/icon.png"
+description = "AZWELL Isaac Sim training extension (Lv2): an Azwell menu toggling a UI panel."
+authors = ["azwell"]
+readme = "docs/README.md"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "education", "azwell", "ui"]
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.kit.menu.utils" = {}
+
+[[python.module]]
+name = "Isaacsim_Edu_Lv2"

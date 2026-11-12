@@ -1,0 +1,32 @@
+[package]
+version = "0.1.0"
+category = "UI"
+title = "Isaac Sim Edu Lv2 - Lesson 1"
+icon = "data/icon.png"
+description = "AZWELL Isaac Sim training extension (Lv2): Lesson 1 (forklift driving) - opens the warehouse scene and lets the trainee drive a forklift with the keyboard, steer, and pick up pallets with the fork."
+authors = ["azwell"]
+readme = "docs/README.md"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "education", "azwell", "robot"]
+
+[dependencies]
+"omni.kit.uiapp" = {}
+# The forklift AutoNode node types need omni.graph.core itself
+# (og.create_node_type). Never declared before -- it happened to work anyway
+# because some other already-loaded extension pulled these in transitively,
+# so Python imports succeeded even without a guaranteed load order. That's
+# not enough for AutoNode registration: calling og.create_node_type() before
+# omni.graph.core's own native plugin has *finished* starting up crashes Kit
+# outright (reproduced 3x live, confirmed via the crash dump's Python stack
+# pointing straight at register_forklift_node_types() -> og.create_node_type()).
+# Declaring these as real dependencies makes Kit guarantee they're fully
+# started first.
+"omni.graph" = {}
+"omni.graph.core" = {}
+# Same reasoning as omni.graph/omni.graph.core above -- viewport camera
+# switching (since 0.34.0) was already importing this relying on some other
+# extension having transitively loaded it first, with no guarantee of that.
+"omni.kit.viewport.utility" = {}
+
+[[python.module]]
+name = "Isaacsim_Edu_Lv2_Lesson1"

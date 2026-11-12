@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.log
+
+# data and trained models live outside this repository (C:\isaacsimProjects\forklift_ai) -- never commit them
+*.usd
+*.usda
+*.usdc
+*.png
+!*/data/icon.png
+*.jpg
+*.pt
+*.onnx
+*.zip
