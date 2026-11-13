@@ -10,8 +10,11 @@ Lesson 2  지게차 AI           ① 시연 녹화 → ② 경로 학습 + YOLO 
 
 ## 폴더
 
-이 저장소 폴더가 곧 Isaac Sim의 **익스텐션 검색 경로**다. 반드시 `C:\isaacsimProjects\isaacsim-edu-lv2`에 둔다
-(익스텐션이 장면·데이터를 `C:\isaacsimProjects\...`에서 찾는다).
+이 저장소 폴더가 곧 Isaac Sim의 **익스텐션 검색 경로**다. 교육 VM에서는 `E:\omniverse\content\isaacsim-edu-lv2`에 둔다.
+
+익스텐션은 경로를 고정해 두지 않고 **이 저장소 폴더의 바로 위 폴더**(교육 VM: `E:\omniverse\content`)를 기준으로 장면 · 데이터를 찾는다.
+그래서 아래 세 폴더가 같은 폴더 안에 나란히 있으면 어느 드라이브 · 폴더에 두어도 된다 (개발 PC는 `C:\isaacsimProjects`).
+이 문서의 경로는 교육 VM 기준이다.
 
 | 폴더 | 내용 |
 |---|---|
@@ -24,8 +27,8 @@ Lesson 2  지게차 AI           ① 시연 녹화 → ② 경로 학습 + YOLO 
 
 | 경로 | 내용 | 받는 곳 |
 |---|---|---|
-| `C:\isaacsimProjects\iw_hub_warehouse_navigation\` | 창고 장면 (`iw_hub_warehouse_navigation.usd`, 지게차 AI용 `iw_hub_warehouse_forklift_ai.usd`) | 강사가 복사 (Lv1과 같은 장면 폴더) |
-| `C:\isaacsimProjects\forklift_ai\demos\` | 기본 시연 15개 | 이 저장소 GitHub Release의 zip |
+| `E:\omniverse\content\iw_hub_warehouse_navigation\` | 창고 장면 (`iw_hub_warehouse_navigation.usd`, 지게차 AI용 `iw_hub_warehouse_forklift_ai.usd`) | 강사가 복사 (Lv1과 같은 장면 폴더) |
+| `E:\omniverse\content\forklift_ai\demos\` | 기본 시연 15개 | 이 저장소 GitHub Release의 zip |
 
 학습된 모델(`forklift_ai\models\paths.json`, `forklift_ai\runs\...\best.onnx`)은 배포하지 않는다. 교육생이 직접 만든다.
 

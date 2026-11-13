@@ -30,7 +30,7 @@ nvidia-smi
 YOLO 전용 Python 공간을 따로 만든다. Isaac Sim의 Python과 섞이지 않는다.
 
 ```
-cd C:\isaacsimProjects\forklift_ai
+cd E:\omniverse\content\forklift_ai
 python -m venv yolo-venv
 yolo-venv\Scripts\activate.bat
 ```
@@ -64,7 +64,7 @@ onnx 관련 패키지는 7절 내보내기에 쓴다. 미리 깔아 두면 내�
 녹화 폴더(`forklift_ai\demos\demo_*`: 기본 시연 15개 + 내가 녹화한 시연)를 YOLO가 읽는 구조로 정리한다.
 
 ```
-python C:\isaacsimProjects\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
+python E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
 ```
 
 출력 예 (시연 20개일 때):
@@ -79,7 +79,7 @@ python C:\isaacsimProjects\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_y
 ## 5. 학습 (이 PC 기준 50 epoch 약 15분)
 
 ```
-yolo detect train data=C:\isaacsimProjects\forklift_ai\yolo_dataset\data.yaml model=yolo11n.pt epochs=50 imgsz=640 batch=16 project=C:\isaacsimProjects\forklift_ai\runs name=my_forklift
+yolo detect train data=E:\omniverse\content\forklift_ai\yolo_dataset\data.yaml model=yolo11n.pt epochs=50 imgsz=640 batch=16 project=E:\omniverse\content\forklift_ai\runs name=my_forklift
 ```
 
 | 옵션 | 뜻 |
@@ -99,7 +99,7 @@ yolo detect train data=C:\isaacsimProjects\forklift_ai\yolo_dataset\data.yaml mo
 
 ## 6. 결과 보기
 
-`C:\isaacsimProjects\forklift_ai\runs\my_forklift\` 폴더:
+`E:\omniverse\content\forklift_ai\runs\my_forklift\` 폴더:
 
 | 파일 | 볼 것 |
 |---|---|
@@ -110,13 +110,13 @@ yolo detect train data=C:\isaacsimProjects\forklift_ai\yolo_dataset\data.yaml mo
 
 새 이미지로 확인:
 ```
-yolo detect predict model=C:\isaacsimProjects\forklift_ai\runs\my_forklift\weights\best.pt source=C:\isaacsimProjects\forklift_ai\yolo_dataset\images\val save=True
+yolo detect predict model=E:\omniverse\content\forklift_ai\runs\my_forklift\weights\best.pt source=E:\omniverse\content\forklift_ai\yolo_dataset\images\val save=True
 ```
 
 ## 7. Isaac Sim용으로 내보내기 (약 10초)
 
 ```
-yolo export model=C:\isaacsimProjects\forklift_ai\runs\my_forklift\weights\best.pt format=onnx
+yolo export model=E:\omniverse\content\forklift_ai\runs\my_forklift\weights\best.pt format=onnx
 ```
 
 `runs\my_forklift\weights\best.onnx` 가 생긴다. Isaac Sim을 다시 켤 필요는 없다.

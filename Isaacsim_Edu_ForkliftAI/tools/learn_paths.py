@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-ROOT = HERE.parents[3]  # C:\isaacsimProjects
+ROOT = HERE.parents[3]  # the folder that holds isaacsim-edu-lv2 (training VM: E:\omniverse\content)
 spec = importlib.util.spec_from_file_location("paths", HERE.parents[1] / "Isaacsim_Edu_ForkliftAI" / "paths.py")
 P = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(P)

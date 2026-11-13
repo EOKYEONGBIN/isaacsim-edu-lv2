@@ -18,7 +18,7 @@ import random
 import shutil
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]  # C:\isaacsimProjects
+ROOT = Path(__file__).resolve().parents[3]  # the folder that holds isaacsim-edu-lv2 (training VM: E:\omniverse\content)
 DEFAULT_DEMOS = ROOT / "forklift_ai" / "demos"
 DEFAULT_OUT = ROOT / "forklift_ai" / "yolo_dataset"
 CLASSES = ["pallet", "rack_level2"]

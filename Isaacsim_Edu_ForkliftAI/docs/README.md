@@ -12,7 +12,7 @@
 ## 실행
 
 `Isaacsim_Edu_Lv2` 런처의 **Lesson 2 · 지게차 AI** 버튼으로 켠다. 의존하는 `Isaacsim_Edu_Lv2_Lesson1`(지게차 조작)이 함께 켜지고,
-이 익스텐션은 지게차 AI 전용 장면 `C:\isaacsimProjects\iw_hub_warehouse_navigation\iw_hub_warehouse_forklift_ai.usd`를 연다.
+이 익스텐션은 지게차 AI 전용 장면 `E:\omniverse\content\iw_hub_warehouse_navigation\iw_hub_warehouse_forklift_ai.usd`를 연다.
 
 ## 창 "AZ Edu Lv2 - Lesson 2"
 
@@ -27,7 +27,7 @@
 - AI 운전 제한 시간은 3분이다.
 - AI가 운전하는 동안, 그리고 운전이 끝나 멈춘 장면이 남아 있는 동안에는 **녹화 시작이 꺼진다.** Stop이나 'AI 멈춤'으로 장면을 초기화하면 다시 켜진다.
 
-## 데이터 — `C:\isaacsimProjects\forklift_ai\`
+## 데이터 — `E:\omniverse\content\forklift_ai\`
 
 | 경로 | 내용 |
 |---|---|
