@@ -304,8 +304,8 @@ class DemoRecorder:
 
 # Every AI drive's result, one row each (opens in Excel: UTF-8 with BOM)
 AI_RUNS_FILE = ROOT / "forklift_ai" / "ai_runs.csv"
-AI_RUN_FIELDS = ["when", "start_vertical_m", "start_horizontal_m", "start_yaw_deg", "pallet_back_m", "result", "detail", "seconds", "route",
-                 "eyes", "seat_true_m", "seat_used_m"]
+AI_RUN_FIELDS = ["when", "start_vertical_m", "start_horizontal_m", "start_yaw_deg", "pallet_back_m", "result", "detail", "seconds", "model",
+                 "route", "eyes", "seat_true_m", "seat_used_m"]
 
 
 def load_ai_runs():
@@ -351,7 +351,7 @@ def list_demos():
             fk = meta.get("start", {}).get("forklift", {})
             demos.append({"name": meta_path.parent.name, "success": bool(meta.get("success")),
                           "duration_s": float(meta.get("duration_s", 0.0)), "images": int(meta.get("images", 0)),
-                          "start": (fk.get("x"), fk.get("y"))})
+                          "start": (fk.get("x"), fk.get("y")), "yaw": fk.get("yaw_deg")})
     return demos
 
 

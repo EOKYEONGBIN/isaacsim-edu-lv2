@@ -1,5 +1,5 @@
 [package]
-version = "0.2.0"
+version = "0.4.1"
 category = "UI"
 title = "Isaac Sim Edu Lv2 - Lesson 2 (Forklift AI)"
 description = "AZWELL Isaac Sim advanced training: drive the Lesson 1 forklift to put a pallet on the 2nd rack level while every step (keys, forklift state, pallet pose, driver-camera images with automatic YOLO labels) is recorded for imitation learning."

@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import time
+from pathlib import Path
 
 import carb
 import carb.settings
@@ -26,8 +27,30 @@ from .recorder import (AI_CAMERA_PATH, DEMOS_DIR, PALLET_BOXES_PATH, PALLET_PATH
 from .vision import newest_model
 from .window import PANEL_SIGN, ForkliftAIWindow
 
-PATHS_FILE = ROOT / "forklift_ai" / "models" / "paths.json"
-RUNS_DIR = ROOT / "forklift_ai" / "runs"  # YOLO training output; the newest runs/*/weights/best.onnx is used
+MODELS_DIR = ROOT / "forklift_ai" / "models"
+PATHS_FILE = MODELS_DIR / "paths.json"  # learn_paths.py without --name: the '기본' AI model
+RUNS_DIR = ROOT / "forklift_ai" / "runs"  # YOLO training output (runs/<name>/weights/best.onnx)
+DEFAULT_MODEL = "기본"
+
+
+def list_ai_models():
+    """The AI models the panel offers: models/paths.json ('기본') and every models/<name>/paths.json
+    (learn_paths.py --name <name>). Each pairs with a YOLO model: models/<name>/best.onnx, else the YOLO run of
+    the same name (runs/<name>/weights/best.onnx), else the newest YOLO run.
+    Returns [{"name", "paths", "yolo", "mtime"}]."""
+    found = [(DEFAULT_MODEL, PATHS_FILE, None)] if PATHS_FILE.exists() else []
+    found += [(p.parent.name, p, p.parent) for p in sorted(MODELS_DIR.glob("*/paths.json"))]
+    newest = newest_model(RUNS_DIR)
+    models = []
+    for name, paths, folder in found:
+        own = [folder / "best.onnx", RUNS_DIR / name / "weights" / "best.onnx"] if folder else []
+        yolo = next((str(c) for c in own if c.exists()), newest)
+        try:
+            mtime = os.stat(paths).st_mtime
+        except OSError:
+            continue
+        models.append({"name": name, "paths": paths, "yolo": yolo, "mtime": mtime})
+    return models
 # This practice's own copy of the Lesson 1 scene (same folder, so the asset references still resolve);
 # edit it freely without touching Lesson 1.
 SCENE_FILE = ROOT / "iw_hub_warehouse_navigation" / "iw_hub_warehouse_forklift_ai.usd"
@@ -63,6 +86,9 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             "run_discard": self._on_run_discard,
             "run_clear": self._on_run_clear,
             "start_changed": self._on_start_changed,
+            "model_changed": self._refresh_model_info,
+            "open_model_folder": self._on_open_model_folder,
+            "free_changed": self._on_free_changed,
         })
         self._base_pose = None  # (x, y, z, yaw_deg) the scene starts the forklift at
         self._pallet_base = {}  # prim path -> (translate op, scene value, parent world->local) of the pallet / its boxes
@@ -72,8 +98,12 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._ai_scene_held = False  # a finished AI drive's paused end scene is on screen until Stop
         self._ai_task = None
         self._ai_run_info = None  # what the running AI drive started with, for its row in the AI run table
-        self._free_pose = None  # '위치 자유' (trial): (x, y, yaw_deg) the forklift stood at when the AI drive was asked for
-        self._watch = None  # (demos folder, paths.json, newest YOLO model) last seen, to refresh the panel
+        # '위치 자유': (x, y, yaw_deg) where the forklift was put by hand -- taken when the option is turned on and
+        # each time a recording / AI drive starts from a stopped scene; recordings and AI drives start there and
+        # Stop / 'AI 멈춤' bring the forklift back there (instead of the sliders' pose)
+        self._free_pose = None
+        self._watch = None  # (demos folder, AI models) last seen, to refresh the panel
+        self._ai_models = []  # list_ai_models(), as last shown in the panel's 'AI 모델' list
         self._watch_t = 0.0
         self._keys_shown = False
         self._refresh_summary()
@@ -151,17 +181,17 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
     def _refresh_summary(self):
         if self._window:
             self._window.set_summary(*summarize_demos())
-            self._window.set_demos(list_demos(), self._base_pose[:2] if self._base_pose else None)
+            self._window.set_demos(list_demos(), (self._base_pose[0], self._base_pose[1], self._base_pose[3]) if self._base_pose else None)
 
     def _watch_files(self):
-        """Pick up new recordings and a newly learned paths.json / YOLO model without restarting."""
+        """Pick up new recordings and newly learned AI models (paths.json / YOLO) without restarting."""
         def mtime(path):
             try:
                 return os.stat(path).st_mtime
             except OSError:
                 return None
 
-        state = (mtime(DEMOS_DIR), mtime(PATHS_FILE), newest_model(RUNS_DIR))
+        state = (mtime(DEMOS_DIR), tuple((m["name"], m["mtime"], m["yolo"]) for m in list_ai_models()))
         if state != self._watch:
             first = self._watch is None
             self._watch = state
@@ -251,9 +281,33 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             if op.Get() != value:
                 op.Set(value)
 
+    def _capture_free_pose(self, stage):
+        """'위치 자유': remember where the forklift stands now (put there by hand) as the place to start from and
+        to come back to."""
+        if self._scene_ready(stage):
+            s = forklift_state(stage)
+            self._free_pose = (s["x"], s["y"], s["yaw_deg"])
+
+    def _reset_start(self, stage):
+        """Where a stopped scene puts the forklift: the '위치 자유' pose if that option is on, else the sliders'."""
+        if self._window and self._window.free_start and self._free_pose is not None and self._base_pose:
+            self._place_forklift_free(stage)
+        else:
+            self._apply_start(stage)
+
+    def _on_free_changed(self, on):
+        stage = self._stage()
+        if not (self._scene_ready(stage) and omni.timeline.get_timeline_interface().is_stopped()):
+            return
+        if on:
+            self._capture_free_pose(stage)
+        else:
+            self._free_pose = None
+            self._apply_start(stage)  # back to the sliders' pose
+
     def _place_forklift_free(self, stage):
-        """'위치 자유' (trial): the forklift back at the pose it had when the AI drive was asked for -- on the
-        floor (the scene's height) and upright, only its x, y and heading kept."""
+        """'위치 자유': the forklift at the remembered pose -- on the floor (the scene's height) and upright,
+        only its x, y and heading kept."""
         prim = stage.GetPrimAtPath(fon.FORKLIFT_PATH)
         if not prim.IsValid() or self._base_pose is None:
             return
@@ -301,11 +355,14 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if not timeline.is_playing():
             # people's demonstrations are always recorded with the pallet where the scene puts it: the routes
             # the AI learns from them only fit that pallet position
+            if self._window.free_start:  # '위치 자유': record from where the forklift was put by hand
+                if timeline.is_stopped():
+                    self._capture_free_pose(stage)
             self._window.set_pallet_back(0.0)
             if self._window.random_start:
                 self._start_redraw = True  # drawn again once physics runs if it overlaps something
                 self._window.randomize_start()  # '랜덤': a new start each recording, shown on the sliders
-            self._apply_start(stage)
+            self._reset_start(stage)
             viewport = vp_util.get_active_viewport()
             if viewport is not None:
                 fon.reset_camera_to_home(stage, fon.DRIVER_VIEW_CAMERA_PATH)
@@ -342,31 +399,51 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
 
     # ---------------------------------------------------------------- AI driving
 
+    def _selected_model(self):
+        """The AI model picked in the panel (a list_ai_models() entry), or None."""
+        name = self._window.ai_model_name if self._window else None
+        return next((m for m in self._ai_models if m["name"] == name), None)
+
     def _refresh_model_info(self):
         if not self._window:
             return
-        if not PATHS_FILE.exists():
-            self._window.set_model_info("학습된 경로가 없습니다. tools\\learn_paths.py로 먼저 학습하세요.")
+        models = list_ai_models()
+        if [(m["name"], m["mtime"], m["yolo"]) for m in models] != [(m["name"], m["mtime"], m["yolo"]) for m in self._ai_models]:
+            self._ai_models = models
+            items = []
+            for m in models:
+                try:
+                    n = len(json.loads(Path(m["paths"]).read_text(encoding="utf-8"))["demos"])
+                except (OSError, ValueError, KeyError):
+                    n = "?"
+                yolo = os.path.relpath(m["yolo"], RUNS_DIR).split(os.sep)[0] if m["yolo"] else "없음"
+                items.append((m["name"], f"{m['name']} · 경로 {n}개 · YOLO {yolo}"))
+            newest = max(models, key=lambda m: m["mtime"])["name"] if models else None
+            self._window.set_ai_models(items, newest)
+        model = self._selected_model()
+        if model is None:
+            self._window.set_model_info("학습된 AI 모델이 없습니다. tools\\learn_paths.py로 먼저 학습하세요.")
             self._window.set_ai_ready(False)
             return
-        model = newest_model(RUNS_DIR)
-        eyes = (f"AI의 눈: {os.path.relpath(model, RUNS_DIR)}" if model
-                else "AI의 눈: YOLO 모델(runs\\...\\weights\\best.onnx)이 없어 'YOLO 사용'을 골라도 'YOLO 없음'처럼 "
+        paths_file, yolo = Path(model["paths"]), model["yolo"]
+        where = os.path.relpath(paths_file, MODELS_DIR.parent)
+        eyes = (f"YOLO 모델: {os.path.relpath(yolo, RUNS_DIR.parent)}" if yolo
+                else "YOLO 모델(runs\\...\\weights\\best.onnx)이 없어 'YOLO로 파렛트 거리 재기'를 켜도 끈 것처럼 "
                      "녹화 경로 끝에서 들어 올립니다.")
         try:
-            paths = json.loads(PATHS_FILE.read_text(encoding="utf-8"))
+            paths = json.loads(paths_file.read_text(encoding="utf-8"))
             usable = sum(1 for d in paths["demos"] if d.get("usable"))
             self._window.set_ai_ready(usable > 0)
             if not usable:
-                self._window.set_model_info(f"학습된 경로 중 AI가 쓸 수 있는 경로가 없습니다 ({PATHS_FILE.name}).", eyes)
+                self._window.set_model_info(f"학습된 경로 중 AI가 쓸 수 있는 경로가 없습니다 ({where}).", eyes)
                 return
-            self._window.set_model_info(f"학습된 경로: 시연 {len(paths['demos'])}개 ({PATHS_FILE.name})", eyes)
-            if model and not paths.get("vision"):
-                self._window.set_model_info(f"학습된 경로: 시연 {len(paths['demos'])}개 ({PATHS_FILE.name})",
+            self._window.set_model_info(f"학습된 경로: 시연 {len(paths['demos'])}개 ({where})", eyes)
+            if yolo and not paths.get("vision"):
+                self._window.set_model_info(f"학습된 경로: 시연 {len(paths['demos'])}개 ({where})",
                                             eyes + " · 거리표가 없으니 learn_paths.py를 다시 실행하세요.")
         except (OSError, ValueError, KeyError):
             self._window.set_ai_ready(False)
-            self._window.set_model_info(f"학습된 경로 파일을 읽지 못했습니다: {PATHS_FILE}", eyes)
+            self._window.set_model_info(f"학습된 경로 파일을 읽지 못했습니다: {paths_file}", eyes)
 
     def _on_ai_start(self):
         if self._driver is not None and self._driver.active:
@@ -376,8 +453,9 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if not self._scene_ready(stage):
             self._window.set_ai(False, "지게차 AI 장면이 열려 있지 않습니다.", ok=False)
             return
-        if not PATHS_FILE.exists():
-            self._window.set_ai(False, "학습된 경로(paths.json)가 없습니다.", ok=False)
+        selected = self._selected_model()
+        if selected is None or not Path(selected["paths"]).exists():
+            self._window.set_ai(False, "학습된 AI 모델(paths.json)이 없습니다.", ok=False)
             return
         if self._recorder.active:
             return
@@ -387,10 +465,10 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if self._driver is not None:
             self._driver.stop()
         eyes = self._window.eyes_mode
-        model = newest_model(RUNS_DIR) if eyes == "yolo" else None
+        model = selected["yolo"] if eyes == "yolo" else None
         try:
-            # 'YOLO 사용' without a trained model drives like 'YOLO 없음' (the panel says so)
-            self._driver = AIDriver(PATHS_FILE, model, blind=eyes == "none" or model is None,
+            # 'YOLO로 파렛트 거리 재기' on without a trained model drives as if it were off (the panel says so)
+            self._driver = AIDriver(selected["paths"], model, blind=eyes == "none" or model is None,
                                     reposition=self._window.allow_reposition)
         except Exception as e:  # noqa: BLE001 - e.g. the ONNX model could not be loaded
             carb.log_error(f"{LOG} could not start the AI driver: {e}")
@@ -400,16 +478,17 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._refresh_model_info()
         dx, dy = self._window.start_offset
         yaw = (self._base_pose[3] if self._base_pose else 0.0) + self._window.start_yaw
-        self._free_pose = None
-        if self._window.free_start and self._base_pose:  # '위치 자유': start where the forklift stands now
-            s = forklift_state(stage)
-            self._free_pose = (s["x"], s["y"], s["yaw_deg"])
-            dx, dy, yaw = s["x"] - self._base_pose[0], s["y"] - self._base_pose[1], s["yaw_deg"]
+        if self._window.free_start and self._base_pose:  # '위치 자유': start where the forklift was put by hand
+            if omni.timeline.get_timeline_interface().is_stopped() or self._free_pose is None:
+                self._capture_free_pose(stage)  # (a paused end scene keeps the pose the last drive started from)
+            fx, fy, fyaw = self._free_pose
+            dx, dy, yaw = fx - self._base_pose[0], fy - self._base_pose[1], fyaw
         self._ai_run_info = {"when": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                              "start_vertical_m": f"{PANEL_SIGN['x'] * dx:+.2f}",
                              "start_horizontal_m": f"{PANEL_SIGN['y'] * dy:+.2f}",
                              "start_yaw_deg": f"{yaw % 360.0:.0f}",
-                             "pallet_back_m": f"{self._window.pallet_back:.2f}"}
+                             "pallet_back_m": f"{self._window.pallet_back:.2f}",
+                             "model": selected["name"]}
         self._window.set_ai(True, "AI 운전 준비 중...")
         self._ai_task = asyncio.ensure_future(self._start_ai_run())
 
@@ -423,10 +502,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             for _ in range(5):
                 await app.next_update_async()
         stage = self._stage()
-        if self._free_pose is not None:
-            self._place_forklift_free(stage)  # Stop put it back at the scene's start; back to where it was
-        else:
-            self._apply_start(stage)
+        self._reset_start(stage)  # Stop put it back at the scene's start: the sliders' pose or the '위치 자유' pose
         viewport = vp_util.get_active_viewport()
         if viewport is not None:
             fon.reset_camera_to_home(stage, fon.DRIVER_VIEW_CAMERA_PATH)
@@ -438,7 +514,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             await app.next_update_async()
         if self._driver is None or not timeline.is_playing():
             return
-        redraw = self._window.random_start and self._free_pose is None
+        redraw = self._window.random_start and not self._window.free_start
         problem = self._clear_start(stage, redraw)
         if problem:
             self._end_ai(f"실패: {problem}", ok=False, stop_timeline=True, result="출발 불가")
@@ -556,7 +632,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         elif result == "no_route":
             self._end_ai(f"실패: {d.plan_text}", ok=False, stop_timeline=True, result="경로 없음")
         elif result == "tilted":
-            hint = ("\n'YOLO 없음'은 파렛트까지 거리를 재지 않아서, 파렛트가 녹화 때와 다른 곳에 있으면 포크가 덜 들어간 채 "
+            hint = ("\n'YOLO로 파렛트 거리 재기'가 꺼져 있으면 파렛트까지 거리를 재지 않아서, 파렛트가 녹화 때와 다른 곳에 있으면 포크가 덜 들어간 채 "
                     "들어 올립니다." if d.blind else "")
             self._end_ai(f"실패: 파렛트가 포크에 제대로 실리지 않아 {d.tilt_deg:.0f}° 기울어서 그 자리에서 멈췄습니다."
                          f"{hint}\n{d.plan_text}{seat}", ok=False, stop_timeline=True)
@@ -576,6 +652,14 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
     def _on_open_folder(self):
         DEMOS_DIR.mkdir(parents=True, exist_ok=True)
         os.startfile(os.path.normpath(str(DEMOS_DIR)))
+
+    def _on_open_model_folder(self):
+        """The chosen AI model's folder (models\\<name>, or models for '기본') in Windows Explorer; with no model
+        yet the forklift_ai folder, where models\\ will appear."""
+        model = self._selected_model()
+        folder = Path(model["paths"]).parent if model else (MODELS_DIR if MODELS_DIR.exists() else MODELS_DIR.parent)
+        if folder.exists():
+            os.startfile(os.path.normpath(str(folder)))
 
     # ---------------------------------------------------------------- recording
 
@@ -626,7 +710,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             if self._reapply_frames > 0 and timeline.is_stopped():
                 self._reapply_frames -= 1
                 if self._reapply_frames == 0 and self._scene_ready(self._stage()):
-                    self._apply_start(self._stage())
+                    self._reset_start(self._stage())
             return
         stage = self._stage()
         if self._driver is not None and (self._driver.active or self._ai_pending):

@@ -27,7 +27,7 @@ KEY_OF_PATH = {
     fon.KEY_LEFT_PATH: "left", fon.KEY_RIGHT_PATH: "right",
     fon.KEY_LIFT_UP_PATH: "lift_up", fon.KEY_LIFT_DOWN_PATH: "lift_down",
 }
-TIMEOUT_S = 90.0
+TIMEOUT_S = 180.0
 SETTLE_S = 1.5  # after the forks are out, give the pallet this long to come to rest before judging
 BACK_OUT_MAX_M = 1.5  # if the learned route ends with the forks still in the pallet, back straight out this much more
 LIFTED_M = 0.2  # forks this high: the pallet should be riding on them
@@ -214,18 +214,9 @@ class AIDriver:
         return lambda x, y, yaw_deg, lift: fon._pose_blocked(stage, x, y, math.radians(yaw_deg), lift)
 
     def check_start(self, stage, x, y, yaw_deg, lift):
-        """Why the AI cannot set off from here (Korean, for the panel), or None: touching a rack or pillar
-        already, or on the far side of the target rack (the way round it is beyond what the AI can find)."""
-        problem = start_overlap(stage, x, y, yaw_deg, lift)
-        if problem:
-            return problem
-        (x0, _y0, _z0), (x1, _y1, _z1) = shelf_footprint(stage)
-        px = pallet_pose(stage)[0]
-        front = x1 if px > x1 else x0  # the rack's face toward the pallet (the racks here run along the scene's Y)
-        if (x - front) * (px - front) < 0:
-            return ("지게차가 목표 선반의 반대편(뒤쪽)에 있어 선반을 돌아가야 합니다. 지금 AI는 선반을 돌아가는 길은 "
-                    "찾지 못하니, 선반 앞쪽(파렛트가 있는 쪽)에 놓아 주세요.")
-        return None
+        """Why the AI cannot set off from here (Korean, for the panel), or None: touching a rack, pillar or the
+        pallet already. A start behind the target rack is left to plan(): it goes if a learned route gets round."""
+        return start_overlap(stage, x, y, yaw_deg, lift)
 
     def start(self, sim_time):
         if self._orig is None:
@@ -342,7 +333,7 @@ class AIDriver:
     def eyes_text(self):
         e = self.eyes
         if e is None:
-            return "YOLO 없음: 파렛트 거리를 재지 않고 녹화 경로 끝에서 들어 올림" if self.blind else "파렛트 거리: 시뮬레이터 정답"
+            return "YOLO 거리 재기 끔: 파렛트 거리를 재지 않고 녹화 경로 끝에서 들어 올림" if self.blind else "파렛트 거리: 시뮬레이터 정답"
         if e.spot is None or self._pose is None:
-            return "AI의 눈(YOLO): 파렛트 찾는 중"
-        return f"AI의 눈(YOLO): 파렛트 {e.ahead(*self._pose):.2f} m 앞"
+            return "YOLO: 파렛트 찾는 중"
+        return f"YOLO: 파렛트 {e.ahead(*self._pose):.2f} m 앞"

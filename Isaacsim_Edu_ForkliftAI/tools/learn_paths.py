@@ -1,6 +1,7 @@
 """Learn driving routes from the recorded demonstrations.
 
     python learn_paths.py                  (defaults below; numpy only, e.g. inside yolo-venv)
+    python learn_paths.py --name my_forklift   (-> models\\my_forklift\\paths.json: an 'AI 모델' of its own)
     python learn_paths.py --demos D:\\demos
 
 From every successful demonstration it keeps the route (forward / reverse segments, tiny
@@ -28,8 +29,13 @@ spec.loader.exec_module(V)
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--demos", type=Path, default=ROOT / "forklift_ai" / "demos")
-    ap.add_argument("--out", type=Path, default=ROOT / "forklift_ai" / "models" / "paths.json")
+    ap.add_argument("--name", help="AI model name: saved as models\\<name>\\paths.json and offered in the panel's "
+                                   "'AI 모델' list (a YOLO run of the same name is paired with it)")
+    ap.add_argument("--out", type=Path, help="where to save (default models\\paths.json, or models\\<name>\\paths.json)")
     args = ap.parse_args()
+    if args.out is None:
+        models = ROOT / "forklift_ai" / "models"
+        args.out = models / args.name / "paths.json" if args.name else models / "paths.json"
 
     t0 = time.time()
     demos = []
