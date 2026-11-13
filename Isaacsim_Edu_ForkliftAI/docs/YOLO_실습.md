@@ -4,6 +4,8 @@ Lesson 2 지게차 AI의 한 부분이다. 녹화한 시연 이미지로 YOLO를
 **파렛트(pallet)** 와 **2층 선반(rack_level2)** 을 찾는 모델을 만든다.
 
 - YOLO는 **물체를 찾는 일만** 한다. 운전하는 법은 `learn_paths.py`(경로 학습)가 따로 배운다.
+- 이 교재는 YOLO 학습 이름을 `my_forklift`로 쓴다. 경로 학습도 **같은 이름**(`learn_paths.py --name my_forklift`)으로 해야
+  지게차 AI 창이 둘을 한 'AI 모델'로 짝지어 쓴다.
 - 모든 명령은 **명령 프롬프트(cmd)** 에서 실행한다. PowerShell은 가상환경 활성화가 막힐 수 있다.
 - 인터넷 연결이 필요하다 (패키지 약 3 GB, 기본 모델 `yolo11n.pt` 자동 다운로드).
 
@@ -86,9 +88,14 @@ yolo detect train data=C:\isaacsimProjects\forklift_ai\yolo_dataset\data.yaml mo
 | `epochs=50` | 학습 데이터를 50번 반복. 시간이 모자라면 `epochs=30` |
 | `imgsz=640` | 이미지 크기 |
 | `batch=16` | 한 번에 보는 이미지 수 |
+| `project=...\runs name=my_forklift` | 결과를 `runs\my_forklift\`에 저장. 경로 학습의 `--name`과 같은 이름 |
 
 - 화면의 `mAP50` 이 학습이 진행될수록 올라가는지 본다 (1.0에 가까울수록 정확).
 - 학습하는 동안에는 **Isaac Sim을 꺼 두면** 2~3배 빨라진다 (같은 GPU를 쓴다).
+- `runs\my_forklift`가 이미 있으면 YOLO는 `my_forklift2`처럼 새 이름으로 저장한다. 그러면 경로 모델과 이름이 어긋나니
+  끝난 뒤 폴더 이름을 확인한다 (예전 폴더를 지우고 다시 학습하거나, 폴더 이름을 맞춘다).
+- 맨 마지막에 저장되는 `best.pt`는 **mAP50-95**가 가장 높았던 epoch다 (박스를 얼마나 정확한 위치 · 크기로 그렸는지까지 보는 점수).
+  지게차 AI는 박스 가장자리 위치로 거리를 재므로 이 기준이 맞다.
 
 ## 6. 결과 보기
 
@@ -112,8 +119,14 @@ yolo detect predict model=C:\isaacsimProjects\forklift_ai\runs\my_forklift\weigh
 yolo export model=C:\isaacsimProjects\forklift_ai\runs\my_forklift\weights\best.pt format=onnx
 ```
 
-`best.onnx` 가 생긴다. 지게차 AI 창은 `runs` 폴더에서 **가장 최근의 `best.onnx`를 자동으로** 고른다.
-다음 "AI 운전 시작"부터 쓰이므로 Isaac Sim을 다시 켤 필요는 없다. 창의 **파렛트 거리 판단**을 **YOLO 사용**으로 두고 운전시킨다.
+`runs\my_forklift\weights\best.onnx` 가 생긴다. Isaac Sim을 다시 켤 필요는 없다.
+
+지게차 AI 창에서:
+1. **AI 모델** 목록에서 `my_forklift`를 고른다. 항목에 "my_forklift · 경로 n개 · YOLO my_forklift"가 보이면 짝이 맞은 것이다.
+2. **YOLO로 파렛트 거리 재기**를 ON으로 두고 AI 운전을 시작한다.
+
+AI 모델 하나가 쓰는 YOLO를 고르는 순서:
+`models\<이름>\best.onnx` → 같은 이름의 `runs\<이름>\weights\best.onnx` → 둘 다 없으면 **가장 최근에 학습한** YOLO.
 
 ---
 
@@ -126,6 +139,7 @@ yolo export model=C:\isaacsimProjects\forklift_ai\runs\my_forklift\weights\best.
 | 5. 학습 (2026-11-11, 시연 20개) | epoch당 약 16초 (Isaac Sim을 같이 켜 두었을 때 28~50초). 81 epoch에서 자동 종료, 27분 |
 | 정확도 mAP50 | 15 epoch 0.938 → 30 epoch 0.959 → 50 epoch 0.962 → 최고 0.976 (71 epoch) |
 | 7. 내보내기 | 3~10초, `best.onnx` 10.2 MB |
+| 5. 학습 (2026-11-12, 시연 35개) | 학습 이미지 약 5천 장 · 검증 1,170장, 50 epoch 24분 (0.398시간), mAP50 0.966 · mAP50-95 0.823 (best = 50 epoch) |
 
 - **50 epoch는 약 13~15분**, 30 epoch는 약 8~9분이다 (Isaac Sim을 끈 상태 기준).
 - 30 epoch와 50 epoch의 mAP50 차이는 0.003이라, 시간이 빠듯하면 30 epoch로 줄여도 된다.
