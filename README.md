@@ -19,7 +19,7 @@ Lesson 2  지게차 AI           ① 시연 녹화 → ② 경로 학습 + YOLO 
 | 폴더 | 내용 |
 |---|---|
 | `Isaacsim_Edu_Lv2/` | 런처. Azwell 메뉴의 "AZ Edu Lv2" 창, 레슨 버튼 |
-| `Isaacsim_Edu_Lv2_Lesson1/` | Lesson 1 지게차 시뮬레이션 (Lv1 Lesson 3 복사본) |
+| `Isaacsim_Edu_Lv2_Lesson1/` | Lesson 1 지게차 시뮬레이션 |
 | `Isaacsim_Edu_ForkliftAI/` | Lesson 2 지게차 AI. `tools/`에 학습 스크립트, `docs/YOLO_실습.md`에 교육생 YOLO 교재 |
 | `docs/` | 강사용 문서 |
 

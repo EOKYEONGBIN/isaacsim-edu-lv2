@@ -1,0 +1,89 @@
+﻿AZ Edu Lv2 · Lesson 2 지게차 AI — 실습 명령어 (복사해서 쓰기)
+
+- 명령은 모두 "명령 프롬프트(cmd)"에 붙여 넣는다. 한 줄씩 붙여 넣고 Enter.
+- 순서는 슬라이드와 같다: [02] YOLO 설치 미리 걸어 두기 → [09] STEP 2 경로 학습 → [11] STEP 3 YOLO 학습
+- 가상환경 · PyTorch(슬라이드의 1 · 2번)는 VM에 미리 설치돼 있다. 맨 아래 [부록]은 없을 때만 한다.
+- 학습 이름은 my_forklift 로 적었다. 바꾸려면 아래의 my_forklift 를 모두 같은 이름으로 바꾼다.
+  (경로 학습과 YOLO가 같은 이름이어야 AI 모델 목록에서 한 쌍으로 묶인다)
+
+
+================================================================
+ [02] 3 · 가상환경 켜기 · GPU 확인
+================================================================
+
+cd /d E:\omniverse\content\forklift_ai
+
+yolo-venv\Scripts\activate.bat
+
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+
+  -> 프롬프트 앞에 (yolo-venv) 가 붙고, True 와 GPU 이름이 나오면 된다.
+  -> "지정된 경로를 찾을 수 없습니다" 가 나오면 가상환경이 없는 것이다. 맨 아래 [부록]을 먼저 한다.
+
+
+================================================================
+ [02] 4 · YOLO 설치   (직접 설치 · 슬라이드 11의 3번과 같은 명령)
+================================================================
+
+pip install ultralytics onnx onnxslim onnxruntime
+
+yolo checks
+
+
+================================================================
+ [09] STEP 2 · 경로 학습   (시연 녹화가 끝난 뒤 · 몇 초)
+================================================================
+
+E:\omniverse\content\forklift_ai\yolo-venv\Scripts\python.exe E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\learn_paths.py --name my_forklift
+
+  -> forklift_ai\models\my_forklift\paths.json 이 생기고, 창의 AI 모델 목록에 my_forklift 가 추가된다.
+
+
+================================================================
+ [11] STEP 3 · 4 · 학습 데이터 정리
+================================================================
+  cmd 창을 새로 열었다면 가상환경부터 켠다:
+
+cd /d E:\omniverse\content\forklift_ai
+
+yolo-venv\Scripts\activate.bat
+
+  학습 데이터 정리:
+
+python E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
+
+
+================================================================
+ [11] STEP 3 · 5 · YOLO 학습   (50 epoch 약 13~15분)
+================================================================
+
+cd /d E:\omniverse\content\forklift_ai
+
+yolo detect train data=E:\omniverse\content\forklift_ai\yolo_dataset\data.yaml model=yolo11n.pt epochs=50 imgsz=640 batch=16 project=E:\omniverse\content\forklift_ai\runs name=my_forklift
+
+
+================================================================
+ [11] STEP 3 · 6 · ONNX 내보내기
+================================================================
+
+yolo export model=E:\omniverse\content\forklift_ai\runs\my_forklift\weights\best.pt format=onnx
+
+  -> runs\my_forklift\weights\best.onnx 가 생긴다.
+     Isaac Sim 지게차 AI 창의 AI 모델 목록에서 my_forklift 를 고른다.
+
+
+================================================================
+ [부록] 가상환경 · PyTorch가 없을 때만   (슬라이드의 1 · 2번 · PyTorch 약 3 GB 다운로드)
+================================================================
+
+cd /d E:\omniverse\content\forklift_ai
+
+python -m venv yolo-venv
+
+yolo-venv\Scripts\activate.bat
+
+python -m pip install --upgrade pip
+
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+  -> 끝나면 맨 위 [02] 3 의 GPU 확인부터 다시 한다.
