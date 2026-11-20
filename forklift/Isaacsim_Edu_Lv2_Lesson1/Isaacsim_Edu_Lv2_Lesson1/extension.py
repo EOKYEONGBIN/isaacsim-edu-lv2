@@ -29,7 +29,7 @@ from .forklift_omnigraph_nodes import (
 )
 from .window import ForkliftSimWindow
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[4]
 
 
 def get_scene_usd_path():

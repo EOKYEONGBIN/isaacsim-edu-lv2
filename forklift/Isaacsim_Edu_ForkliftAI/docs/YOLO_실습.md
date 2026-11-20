@@ -64,7 +64,7 @@ onnx 관련 패키지는 7절 내보내기에 쓴다. 미리 깔아 두면 내�
 녹화 폴더(`forklift_ai\demos\demo_*`: 기본 시연 15개 + 내가 녹화한 시연)를 YOLO가 읽는 구조로 정리한다.
 
 ```
-python E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
+python E:\omniverse\content\isaacsim-edu-lv2\forklift\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
 ```
 
 출력 예 (시연 20개일 때):

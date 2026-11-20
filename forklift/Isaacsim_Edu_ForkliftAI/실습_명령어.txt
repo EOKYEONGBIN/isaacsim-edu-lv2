@@ -34,7 +34,7 @@ yolo checks
  4번 경로 학습   (시연 녹화가 끝난 뒤 · 몇 초)
 ================================================================
 
-E:\omniverse\content\forklift_ai\yolo-venv\Scripts\python.exe E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\learn_paths.py --name my_forklift
+E:\omniverse\content\forklift_ai\yolo-venv\Scripts\python.exe E:\omniverse\content\isaacsim-edu-lv2\forklift\Isaacsim_Edu_ForkliftAI\tools\learn_paths.py --name my_forklift
 
   -> forklift_ai\models\my_forklift\paths.json 이 생기고, 창의 AI 모델 목록에 my_forklift 가 추가된다.
 
@@ -50,7 +50,7 @@ yolo-venv\Scripts\activate.bat
 
   학습 데이터 만들기:
 
-python E:\omniverse\content\isaacsim-edu-lv2\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
+python E:\omniverse\content\isaacsim-edu-lv2\forklift\Isaacsim_Edu_ForkliftAI\tools\make_yolo_dataset.py
 
 
 ================================================================

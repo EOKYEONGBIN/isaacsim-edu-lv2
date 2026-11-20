@@ -10,9 +10,11 @@ Lesson 2  지게차 AI           ① 시연 녹화 → ② 경로 학습 + YOLO 
 
 ## 폴더
 
-이 저장소 폴더가 곧 Isaac Sim의 **익스텐션 검색 경로**다. 교육 VM에서는 `E:\omniverse\content\isaacsim-edu-lv2`에 둔다.
+이 `forklift` 폴더가 곧 Isaac Sim의 **익스텐션 검색 경로**다. 저장소는 교육 VM의 `E:\omniverse\content\isaacsim-edu-lv2`에 두므로,
+검색 경로는 `E:\omniverse\content\isaacsim-edu-lv2\forklift`이다. 저장소 맨 위의 `ExtensionRoot.config`에 적힌 폴더들을
+`AZ Edu Lv2 익스텐션.exe`가 검색 경로로 등록한다.
 
-익스텐션은 경로를 고정해 두지 않고 **이 저장소 폴더의 바로 위 폴더**(교육 VM: `E:\omniverse\content`)를 기준으로 장면 · 데이터를 찾는다.
+익스텐션은 경로를 고정해 두지 않고 **저장소 폴더(`isaacsim-edu-lv2`)의 바로 위 폴더**(교육 VM: `E:\omniverse\content`)를 기준으로 장면 · 데이터를 찾는다.
 그래서 아래 세 폴더가 같은 폴더 안에 나란히 있으면 어느 드라이브 · 폴더에 두어도 된다 (개발 PC는 `C:\isaacsimProjects`).
 이 문서의 경로는 교육 VM 기준이다.
 

@@ -27,7 +27,7 @@ from pxr import Gf, Usd, UsdGeom
 
 import Isaacsim_Edu_Lv2_Lesson1.forklift_omnigraph_nodes as fon
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 DEMOS_DIR = ROOT / "forklift_ai" / "demos"
 
 PALLET_PATH = "/Warehouse/Shelf_1/SM_PaletteA_357"
