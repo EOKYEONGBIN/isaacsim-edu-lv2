@@ -29,8 +29,9 @@ Lesson 2  지게차 AI           ① 시연 녹화 → ② 경로 학습 + YOLO 
 
 | 경로 | 내용 | 받는 곳 |
 |---|---|---|
-| `E:\omniverse\content\iw_hub_warehouse_navigation\` | 창고 장면 (`iw_hub_warehouse_navigation.usd`, 지게차 AI용 `iw_hub_warehouse_forklift_ai.usd`) | 강사가 복사 (Lv1과 같은 장면 폴더) |
-| `E:\omniverse\content\forklift_ai\demos\` | 기본 시연 15개 | 이 저장소 GitHub Release의 zip |
+| `E:\omniverse\content\iw_hub_warehouse_navigation\` | 창고 장면 (`iw_hub_warehouse_navigation.usd`, 지게차 AI용 `iw_hub_warehouse_forklift_ai.usd`) | `AZ Edu Lv2 익스텐션.exe`가 받음, 또는 배포 폴더에서 복사 (Lv1과 같은 장면 폴더) |
+| `E:\omniverse\content\forklift_ai\demos\` | 기본 시연 15개 | `AZ Edu Lv2 익스텐션.exe`가 이 저장소 GitHub Release의 zip을 받음 |
+| `E:\omniverse\content\forklift_ai\yolo-venv\` | YOLO용 가상환경 + PyTorch GPU판 | `AZ Edu Lv2 실습환경.exe`의 "실습 전 준비" (ultralytics는 교육생이 설치) |
 
 학습된 모델(`forklift_ai\models\paths.json`, `forklift_ai\runs\...\best.onnx`)은 배포하지 않는다. 교육생이 직접 만든다.
 

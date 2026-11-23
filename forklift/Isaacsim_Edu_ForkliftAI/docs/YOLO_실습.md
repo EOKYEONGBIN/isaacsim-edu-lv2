@@ -6,8 +6,10 @@ Lesson 2 지게차 AI의 한 부분이다. 녹화한 시연 이미지로 YOLO를
 - YOLO는 **물체를 찾는 일만** 한다. 운전하는 법은 `learn_paths.py`(경로 학습)가 따로 배운다.
 - 이 교재는 YOLO 학습 이름을 `my_forklift`로 쓴다. 경로 학습도 **같은 이름**(`learn_paths.py --name my_forklift`)으로 해야
   지게차 AI 창이 둘을 한 'AI 모델'로 짝지어 쓴다.
-- 모든 명령은 **명령 프롬프트(cmd)** 에서 실행한다. PowerShell은 가상환경 활성화가 막힐 수 있다.
-- 인터넷 연결이 필요하다 (패키지 약 3 GB, 기본 모델 `yolo11n.pt` 자동 다운로드).
+- 모든 명령은 **명령 프롬프트(cmd)** 에서 실행한다. PowerShell에서는 `activate.bat`이 가상환경을 켜지 못한다
+  (프롬프트가 `PS`로 시작하면 PowerShell이다. 시작 메뉴에서 "cmd"를 연다).
+- 인터넷 연결이 필요하다 (ultralytics 등 패키지, 기본 모델 `yolo11n.pt` 자동 다운로드).
+- 교육 VM에는 가상환경 `yolo-venv`와 PyTorch(GPU판)가 **미리 설치돼 있다** (1 · 2절은 켜고 확인만 한다).
 
 > **라이선스:** YOLO(Ultralytics)는 AGPL-3.0 오픈소스다. 그래서 교육 자료와 VM에는 들어 있지 않고,
 > **각자 직접 설치해서** 공식 명령으로 학습한다. Isaac Sim 익스텐션은 YOLO 코드를 쓰지 않고,
@@ -25,30 +27,35 @@ nvidia-smi
 - `Python 3.10` ~ `3.12` 이면 된다.
 - `nvidia-smi` 표에 GPU(`NVIDIA A10`)가 보여야 한다.
 
-## 1. 가상환경 만들기 (1분)
+## 1. 가상환경 켜기 (미리 만들어 둠)
 
-YOLO 전용 Python 공간을 따로 만든다. Isaac Sim의 Python과 섞이지 않는다.
+YOLO 전용 Python 공간(가상환경)이다. Isaac Sim의 Python과 섞이지 않는다.
 
 ```
-cd E:\omniverse\content\forklift_ai
-python -m venv yolo-venv
+cd /d E:\omniverse\content\forklift_ai
 yolo-venv\Scripts\activate.bat
 ```
 
-프롬프트 앞에 `(yolo-venv)` 가 붙으면 성공.
+프롬프트 앞에 `(yolo-venv)` 가 붙으면 성공. "지정된 경로를 찾을 수 없습니다"가 나오면 가상환경이 없는 것이다 → 아래 "없을 때만".
 
-## 2. PyTorch(GPU 버전) 먼저 설치 (약 3분)
-
-> ⚠ **순서가 중요하다.** Windows에서 `pip install ultralytics` 만 하면 **GPU가 아닌 CPU 버전 PyTorch**가 깔려
-> 학습이 수십 배 느려진다. GPU 버전을 먼저 설치한다.
+## 2. GPU 확인 (PyTorch GPU판은 미리 설치됨)
 
 ```
-python -m pip install --upgrade pip
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
 `True NVIDIA A10` 이 나와야 다음으로 간다. `False` 면 강사를 부른다.
+
+> **가상환경 · PyTorch가 없을 때만** (PyTorch 약 3 GB 다운로드, 수 분).
+> ⚠ 순서가 중요하다. Windows에서 `pip install ultralytics` 만 하면 **GPU가 아닌 CPU 버전 PyTorch**가 깔려
+> 학습이 수십 배 느려진다. GPU 버전을 먼저 설치한다.
+> ```
+> cd /d E:\omniverse\content\forklift_ai
+> python -m venv yolo-venv
+> yolo-venv\Scripts\activate.bat
+> python -m pip install --upgrade pip
+> pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+> ```
 
 ## 3. YOLO 설치 (약 1분)
 
