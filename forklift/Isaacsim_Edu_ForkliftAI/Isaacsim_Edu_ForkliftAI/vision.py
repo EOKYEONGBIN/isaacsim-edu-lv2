@@ -1,15 +1,12 @@
-"""The AI's eyes: YOLO (ONNX) on the fork camera, and "box in the image -> how far the pallet is".
+"""AI의 눈: 포크 카메라 영상에 YOLO(ONNX)를 돌리고, 이미지 속 박스로 파렛트까지 거리를 추정한다.
 
-Pure numpy, shared by tools/learn_paths.py (learning the distance table from the recorded boxes)
-and the AI driver in Isaac Sim (onnxruntime comes from Isaac Sim's isaacsim.pip.onnx extension).
+순수 numpy. tools/learn_paths.py(녹화된 박스로 거리 표 학습)와 Isaac Sim 안의 AI 운전자가 함께 쓴다
+(onnxruntime은 Isaac Sim의 isaacsim.pip.onnx 익스텐션에서 가져옴).
 
-How far the pallet is, from its box alone (camera between the forks, looking straight ahead):
-  * far away, the box's bottom edge -- where the pallet stands on the floor -- moves down the
-    image as the pallet comes closer;
-  * in the last ~0.5 m that edge is cut off by the image's bottom, but the box's top edge (the
-    pallet's top deck, just below the camera) drops quickly instead.
-Both relations are learned from the recordings: the recorder saved, for every image, the exact
-pallet box and where the pallet really was.
+박스만으로 거리 추정 (카메라는 포크 사이에서 정면을 봄):
+  * 멀리 있을 때: 박스 아래 변(파렛트가 바닥에 닿는 곳)이 가까워질수록 이미지 아래로 내려온다.
+  * 마지막 ~0.5 m: 아래 변은 이미지 밖으로 잘리지만, 위 변(카메라 바로 아래의 파렛트 상판)이 빠르게 내려온다.
+두 관계 모두 녹화 데이터(이미지마다 정확한 파렛트 박스와 실제 파렛트 위치)로 학습한다.
 """
 
 from __future__ import annotations
@@ -21,16 +18,16 @@ import numpy as np
 
 CLASSES = ["pallet", "rack_level2"]
 PALLET = 0
-FLOOR_MIN_BOTTOM = 0.53  # a pallet standing on the floor ends below the image centre (racked ones end above)
-CLIPPED_BOTTOM = 0.97  # box bottom this low = cut off by the image's lower edge
+FLOOR_MIN_BOTTOM = 0.53  # 바닥의 파렛트는 이미지 중앙보다 아래에서 끝남 (랙 위 파렛트는 위에서 끝남)
+CLIPPED_BOTTOM = 0.97  # 박스 아래 변이 이보다 낮으면 이미지 아래 가장자리에 잘린 것
 TABLE_BINS = 16
 MIN_CONF = 0.4
 
 
 def target_pallet(boxes):
-    """The pallet to pick up: on the floor and closest (lowest in the image).
+    """집어 올릴 파렛트: 바닥에 있고 가장 가까운 것(이미지에서 가장 아래).
 
-    boxes: [(cls, cx, cy, w, h, conf)] normalized to the image (0..1). Returns one box or None.
+    boxes: 이미지 기준 정규화(0..1)된 [(cls, cx, cy, w, h, conf)]. 박스 하나 또는 None 반환.
     """
     floor = [b for b in boxes if b[0] == PALLET and b[2] + b[4] / 2 >= FLOOR_MIN_BOTTOM]
     if not floor:
@@ -39,7 +36,7 @@ def target_pallet(boxes):
 
 
 def _monotone_table(feature, ahead):
-    """Median distance per feature bin, forced to shrink as the feature grows."""
+    """feature 구간별 거리 중앙값. feature가 커질수록 거리가 줄어들도록 강제한다."""
     order = np.argsort(feature)
     f, a = np.asarray(feature)[order], np.asarray(ahead)[order]
     edges = np.unique(np.quantile(f, np.linspace(0, 1, TABLE_BINS + 1)))
@@ -49,15 +46,15 @@ def _monotone_table(feature, ahead):
         if m.sum() >= 3:
             xs.append(float(np.median(f[m])))
             ys.append(float(np.median(a[m])))
-    ys = list(np.minimum.accumulate(ys))  # further down the image never means further away
+    ys = list(np.minimum.accumulate(ys))  # 이미지에서 더 아래인데 더 멀 수는 없음
     return [[round(x, 4) for x in xs], [round(y, 3) for y in ys]]
 
 
 def learn_table(demo_dirs, pallet_ahead_fn):
-    """Distance table from the recorded label files + true pallet positions.
+    """녹화된 라벨 파일과 실제 파렛트 위치로 거리 표를 만든다.
 
-    pallet_ahead_fn(x, y, yaw_deg, px, py) -> (ahead, side). Only the drive in, before lifting.
-    Returns ({"far": [bottoms, aheads], "near": [tops, aheads]}, samples) or (None, 0).
+    pallet_ahead_fn(x, y, yaw_deg, px, py) -> (ahead, side). 들어올리기 전 진입 구간만 사용.
+    ({"far": [bottoms, aheads], "near": [tops, aheads]}, samples) 또는 (None, 0) 반환.
     """
     import csv
 
@@ -99,7 +96,7 @@ def learn_table(demo_dirs, pallet_ahead_fn):
 
 
 def estimate_ahead(box, table):
-    """Metres from the forklift to the pallet centre, from the pallet's box; None if out of the table."""
+    """파렛트 박스로 추정한 지게차~파렛트 중심 거리 [m]. 표 범위 밖이면 None."""
     if box is None or not table:
         return None
     bottom, top = box[2] + box[4] / 2, box[2] - box[4] / 2
@@ -111,37 +108,37 @@ def estimate_ahead(box, table):
 
 
 def newest_model(runs_dir):
-    """The most recently exported YOLO model (runs/<name>/weights/best.onnx), or None."""
+    """가장 최근에 내보낸 YOLO 모델(runs/<name>/weights/best.onnx). 없으면 None."""
     found = glob.glob(os.path.join(str(runs_dir), "*", "weights", "best.onnx"))
     return max(found, key=os.path.getmtime) if found else None
 
 
 class Detector:
-    """YOLO (Ultralytics export, 640x640 input, one output [1, 4 + classes, anchors]) with onnxruntime."""
+    """onnxruntime으로 돌리는 YOLO (Ultralytics export, 입력 640x640, 출력 하나 [1, 4 + classes, anchors])."""
 
     SIZE = 640
 
     def __init__(self, model_path):
-        import onnxruntime as ort  # from Isaac Sim's isaacsim.pip.onnx (or any onnxruntime install)
+        import onnxruntime as ort  # Isaac Sim의 isaacsim.pip.onnx (또는 별도 설치한 onnxruntime)
 
         available = ort.get_available_providers()
         providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
         try:
             self.session = ort.InferenceSession(model_path, providers=providers)
-        except Exception:  # noqa: BLE001 - CUDA libraries missing: run on the CPU
+        except Exception:  # noqa: BLE001 - CUDA 라이브러리가 없으면 CPU로 실행
             self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
         self.input = self.session.get_inputs()[0].name
         self.provider = self.session.get_providers()[0]
         self.path = model_path
 
     def detect(self, rgb, conf=MIN_CONF, iou=0.6):
-        """rgb: HxWx3 uint8. Returns [(cls, cx, cy, w, h, conf)] normalized to the image."""
+        """rgb: HxWx3 uint8. 이미지 기준 정규화된 [(cls, cx, cy, w, h, conf)] 반환."""
         h, w = rgb.shape[:2]
         s = self.SIZE / max(h, w)
         nh, nw = int(round(h * s)), int(round(w * s))
         img = rgb if (nh, nw) == (h, w) else _resize(rgb, nh, nw)
         top, left = (self.SIZE - nh) // 2, (self.SIZE - nw) // 2
-        canvas = np.full((self.SIZE, self.SIZE, 3), 114, dtype=np.uint8)  # Ultralytics letterbox grey
+        canvas = np.full((self.SIZE, self.SIZE, 3), 114, dtype=np.uint8)  # Ultralytics letterbox 회색
         canvas[top:top + nh, left:left + nw] = img
         x = canvas.transpose(2, 0, 1)[None].astype(np.float32) / 255.0
         out = self.session.run(None, {self.input: x})[0][0]  # [4 + classes, anchors]

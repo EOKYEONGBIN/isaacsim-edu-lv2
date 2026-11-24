@@ -5,12 +5,12 @@ WINDOW_TITLE = "AZ Edu Lv2"
 DEFAULT_WIDTH = 320
 DEFAULT_HEIGHT = 460
 BUTTON_HEIGHT = 44
-BUTTON_PADDING = 14  # left inset before the "Lesson N" column
-LESSON_LABEL_WIDTH = 74  # fixed column width so every subtitle starts at the same x
+BUTTON_PADDING = 14  # "Lesson N" 열 앞 왼쪽 여백
+LESSON_LABEL_WIDTH = 74  # 부제목 시작 x를 맞추기 위한 고정 열 폭
 
 
 def _rgb(hex_str, alpha=0xFF):
-    """Convert an "RRGGBB" hex string to omni.ui's packed 0xAABBGGRR color int."""
+    """"RRGGBB" hex 문자열을 omni.ui 색상 정수(0xAABBGGRR)로 변환."""
     r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
     return (alpha << 24) | (b << 16) | (g << 8) | r
 
@@ -19,13 +19,13 @@ COLOR_TEXT_PRIMARY = _rgb("EDEDEA")
 COLOR_TEXT_SECONDARY = _rgb("9A9A94")
 COLOR_BORDER = _rgb("38382F")
 
-COLOR_BRAND_GREEN = _rgb("76B343")  # AZWELL logo green -- "Lesson N" tag color + hover border glow
+COLOR_BRAND_GREEN = _rgb("76B343")  # AZWELL 로고 녹색: "Lesson N" 글자색, hover 테두리
 COLOR_CARD_BG = _rgb("2A2A25")
 COLOR_CARD_BG_HOVER = _rgb("323229")
 COLOR_DISABLED_BG = _rgb("242420")
 COLOR_DISABLED_TEXT = _rgb("5C5C57")
 
-# Lesson 1 = the forklift driving lesson (a copy of Lv1's Lesson 3), Lesson 2 = the forklift AI practice.
+# Lesson 1 = 지게차 운전(Lv1 Lesson 3 복사본), Lesson 2 = 지게차 AI 실습.
 LESSONS = [
     {"key": "lesson1", "title": "Lesson 1", "subtitle": "지게차 시뮬레이션", "enabled": True},
     {"key": "lesson2", "title": "Lesson 2", "subtitle": "지게차 AI", "enabled": True},
@@ -43,8 +43,7 @@ class EduLv2Window(ui.Window):
         kwargs.setdefault("width", DEFAULT_WIDTH)
         kwargs.setdefault("height", DEFAULT_HEIGHT)
         super().__init__(WINDOW_TITLE, **kwargs)
-        # Docking (dock_in_window, split beside Stage) happens from
-        # extension.py instead -- see its own comment for why.
+        # 도킹(dock_in_window, Stage 옆 분할)은 extension.py에서 처리한다 (이유는 그쪽 주석 참고).
         self._visibility_changed_fn = visibility_changed_fn
         self._button1_clicked_fn = button1_clicked_fn
         self._button2_clicked_fn = button2_clicked_fn
@@ -52,11 +51,8 @@ class EduLv2Window(ui.Window):
         self.frame.set_build_fn(self._build_fn)
 
     def _build_fn(self):
-        # spacing=0 + explicit Spacers, height=0 on every Label -- omni.ui
-        # gives unset-height widgets a default stretch factor, which is what
-        # made the panel grow ugly gaps when the window was resized taller.
-        # A single trailing Spacer (no height) collects any leftover room at
-        # the bottom instead of splitting it between every row.
+        # spacing=0 + 명시적 Spacer, 모든 Label에 height=0. omni.ui는 높이 미지정 위젯을 늘어나게 해서
+        # 창을 키우면 행 사이에 빈 틈이 생겼다. 남는 공간은 맨 끝 Spacer(높이 없음) 하나가 받는다.
         with self.frame:
             with ui.VStack(spacing=0, style={"margin": 4}):
                 ui.Label(
@@ -81,11 +77,8 @@ class EduLv2Window(ui.Window):
                 ui.Spacer()
 
     def _build_lesson_button(self, lesson):
-        # ui.Button always centers its own label and can't hold more than one
-        # Label, so a real Button can't give "Lesson N" and the subtitle
-        # separate, column-aligned widths. Instead this builds the row by
-        # hand -- a background Rectangle plus a Label row on top -- and wires
-        # up clicking/hovering directly on the outer ZStack.
+        # ui.Button은 라벨을 항상 가운데 정렬하고 Label을 하나만 가질 수 있어 "Lesson N"과 부제목을 열 정렬할 수 없다.
+        # 그래서 배경 Rectangle 위에 Label 행을 얹어 직접 만들고, 클릭/hover는 바깥 ZStack에 연결한다.
         enabled = lesson["enabled"]
         card_bg, card_hover_bg = COLOR_CARD_BG, COLOR_CARD_BG_HOVER
         border, hover_border = COLOR_BORDER, COLOR_BRAND_GREEN

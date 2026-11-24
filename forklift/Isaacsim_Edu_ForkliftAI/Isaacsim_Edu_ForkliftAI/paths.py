@@ -1,14 +1,11 @@
-"""Learning driving paths from demonstrations, and following them with Lesson 1's keys.
+"""시연에서 주행 경로를 학습하고, Lesson 1의 키 조작으로 그 경로를 따라간다.
 
-Pure Python + numpy (no Kit), shared by tools/learn_paths.py and the AI driver.
+순수 Python + numpy (Kit 없음). tools/learn_paths.py와 AI 운전자가 함께 쓴다.
 
-What is learned from each successful demonstration: the route the forklift took, split into
-forward / reverse segments (tiny back-and-forth corrections removed), and the fork height
-along it -- including the stops where the person lifted or lowered the pallet. Before it moves,
-the AI rehearses every learned route from where the forklift is now (with the forklift's own
-motion rules, in a fraction of a second each), keeps the one whose forks would meet the pallet
-pocket most accurately, and follows it with a pure-pursuit controller that presses the same six
-keys a person would.
+성공한 시연마다 학습하는 것: 전진/후진 구간으로 나눈 주행 경로(짧은 앞뒤 보정은 제거)와
+경로를 따라간 포크 높이(파렛트를 들거나 내린 정지 지점 포함).
+출발 전 AI는 현재 위치에서 학습된 경로를 모두 머릿속으로 주행해 보고(지게차 운동 규칙 그대로, 경로당 1초 미만),
+포크가 파렛트 구멍에 가장 정확히 들어가는 경로를 골라 사람과 같은 6개 키를 누르는 pure pursuit 제어기로 따라간다.
 """
 
 from __future__ import annotations
@@ -20,30 +17,30 @@ import numpy as np
 
 KEYS = ["forward", "backward", "left", "right", "lift_up", "lift_down"]
 
-# Lesson 1 forklift (forklift_omnigraph_nodes): turn rate = 30 deg/s * steer/30 * speed/1.2
+# Lesson 1 지게차(forklift_omnigraph_nodes): 회전 속도 = 30 deg/s * steer/30 * speed/1.2
 MAX_STEER_DEG = 30.0
-CURV_PER_STEER_DEG = math.radians(30.0) / 30.0 / 1.2  # [1/m per deg]: max 0.436 1/m -> 2.3 m radius
+CURV_PER_STEER_DEG = math.radians(30.0) / 30.0 / 1.2  # [1/m per deg]: 최대 0.436 1/m -> 회전 반경 2.3 m
 MAX_CURV = CURV_PER_STEER_DEG * MAX_STEER_DEG
 
-MOVING_MPS = 0.03  # slower than this counts as standing still
-MIN_SEGMENT_M = 0.30  # shorter back-and-forth corrections are dropped
-LIFT_STOP_M = 0.10  # forks moved this much while standing still = a separate step (e.g. lifting the pallet)
+MOVING_MPS = 0.03  # 이보다 느리면 정지로 간주
+MIN_SEGMENT_M = 0.30  # 이보다 짧은 앞뒤 보정은 버림
+LIFT_STOP_M = 0.10  # 정지 중 포크가 이만큼 움직이면 별도 단계 (예: 파렛트 들기)
 RESAMPLE_M = 0.05
-MAX_APPROACH_DEG = 35.0  # forks entering the pallet more crooked than this shove it around instead of sliding in
+MAX_APPROACH_DEG = 35.0  # 이보다 비뚤게 들어가면 포크가 미끄러져 들어가지 않고 파렛트를 밀어냄
 
 
 def _wrap(a):
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
-# ---------------------------------------------------------------- learning
+# ---------------------------------------------------------------- 학습
 
 
 def demo_segments(rows):
-    """Forward/reverse segments of one demonstration (rows = steps.csv dicts).
+    """시연 하나의 전진/후진 구간 (rows = steps.csv 행 dict).
 
-    Returns [{"dir": +1/-1, "x": [...], "y": [...], "yaw": [...] (deg), "lift": [...],
-              "lift_after": fork height to reach before the next segment starts}].
+    [{"dir": +1/-1, "x": [...], "y": [...], "yaw": [...] (deg), "lift": [...],
+      "lift_after": 다음 구간 시작 전 맞출 포크 높이}] 반환.
     """
     t = np.array([float(r["t"]) for r in rows])
     x = np.array([float(r["x"]) for r in rows])
@@ -53,8 +50,8 @@ def demo_segments(rows):
     lift = np.array([float(r["lift_m"]) for r in rows])
     sign = np.where(np.abs(v) < MOVING_MPS, 0, np.sign(v)).astype(int)
 
-    # raw runs of constant non-zero direction; a stop where the forks went up or down also ends a run
-    # ("drive in, stop, lift, drive on" is two steps even though both go forward)
+    # 방향이 같은 연속 주행 구간. 정지 중 포크를 올리거나 내렸으면 거기서도 끊는다
+    # ("진입, 정지, 들기, 계속 전진"은 둘 다 전진이지만 두 단계)
     runs, i, hard = [], 0, False
     while i < len(sign):
         if sign[i] == 0:
@@ -71,7 +68,7 @@ def demo_segments(rows):
                 stop_at = None
             j += 1
         k = j
-        while k > i and sign[k] == 0:  # trailing standstill belongs to the stop, not the run
+        while k > i and sign[k] == 0:  # 끝부분 정지는 주행 구간이 아니라 정지에 속함
             k -= 1
         runs.append([sign[i], i, k, hard])
         hard = lifted
@@ -80,8 +77,8 @@ def demo_segments(rows):
     def length(a, b):
         return float(np.sum(np.hypot(np.diff(x[a:b + 1]), np.diff(y[a:b + 1]))))
 
-    # drop tiny corrections (a lift stop just before one still counts), then merge neighbours that now
-    # drive the same way -- unless the forks went up or down in between
+    # 짧은 보정은 버리고(직전의 들기 정지는 유지), 같은 방향이 된 이웃 구간을 합친다
+    # -- 단, 사이에 포크를 올리거나 내렸으면 합치지 않음
     kept, carry = [], False
     for r in runs:
         if length(r[1], r[2]) < MIN_SEGMENT_M:
@@ -99,8 +96,7 @@ def demo_segments(rows):
     segs = []
     for n, (d, a, b) in enumerate(merged):
         nxt = merged[n + 1][1] if n + 1 < len(merged) else len(rows) - 1
-        # fork height wanted before moving on: what the person had when they started the next segment
-        # (or at the very end)
+        # 다음으로 넘어가기 전 맞출 포크 높이: 사람이 다음 구간을 시작할 때(또는 맨 끝)의 높이
         lift_after = float(lift[nxt])
         px, py, pyaw, plift = _resample(x[a:b + 1], y[a:b + 1], yaw[a:b + 1], lift[a:b + 1])
         segs.append({"dir": int(d), "x": px, "y": py, "yaw": pyaw, "lift": plift, "lift_after": lift_after,
@@ -119,8 +115,8 @@ def _resample(x, y, yaw, lift):
 
 
 def insertion(segs, rows):
-    """Where the forks met the pallet: the first moment the pallet moved (people often push it a little
-    before lifting). Returns (segment index, [x, y, yaw_deg] of the forklift then) or (None, None)."""
+    """포크가 파렛트에 닿은 지점: 파렛트가 처음 움직인 순간 (사람은 들기 전에 조금 미는 경우가 많음).
+    (구간 인덱스, 그때 지게차의 [x, y, yaw_deg]) 또는 (None, None) 반환."""
     p0 = [float(rows[0][k]) for k in ("pallet_x", "pallet_y", "pallet_z")]
     for r in rows:
         moved = math.dist(p0, [float(r[k]) for k in ("pallet_x", "pallet_y", "pallet_z")])
@@ -132,27 +128,26 @@ def insertion(segs, rows):
         return None, None
     started = [k for k, s in enumerate(segs) if s["t0"] <= t_contact]
     if not started or segs[started[-1]]["dir"] < 0:
-        return None, None  # backed into it?
+        return None, None  # 후진하다 닿은 경우?
     return started[-1], pose
 
 
 def pallet_ahead(x, y, yaw_deg, px, py):
-    """Pallet centre in the forklift's frame: (metres ahead, metres to the left)."""
+    """지게차 좌표계에서의 파렛트 중심: (전방 m, 왼쪽 m)."""
     yr = math.radians(yaw_deg)
     fx, fy = math.sin(yr), -math.cos(yr)
     dx, dy = px - x, py - y
     return dx * fx + dy * fy, -dx * fy + dy * fx
 
 
-# Outlines for the rehearsal's pallet check (forklift frame: from / to metres ahead of its origin, half width).
-# Lesson 1's own collision test lets the forklift push the pallet, so a route that drives into it would look
-# fine there: the body must never touch the standing pallet, and the forks (both tines as one outline) must
-# not swing across it -- reaching it more than FORK_SWEEP_DEG askew (the people's own drives reach it at up to
-# ~27 deg). Routes bent to a new start are held to more: forks straight and centred (FORK_SIDE_TOL_M,
-# FORK_ANGLE_TOL_DEG), since their bend ends shortly before the pallet.
+# 리허설의 파렛트 충돌 검사용 외곽 (지게차 좌표계: 원점 기준 전방 시작/끝 m, 반폭).
+# Lesson 1 충돌 검사는 지게차가 파렛트를 미는 것을 허용하므로 파렛트로 돌진하는 경로도 통과해 버린다.
+# 그래서 차체는 서 있는 파렛트에 닿으면 안 되고, 포크(두 갈래를 한 외곽으로)는 FORK_SWEEP_DEG 이상 비뚤게
+# 닿으면 안 된다 (사람 시연은 최대 ~27 deg). 새 출발점에 맞게 변형한 경로는 변형이 파렛트 직전에 끝나므로
+# 더 엄격하게: 포크가 곧고 중앙에 맞아야 함 (FORK_SIDE_TOL_M, FORK_ANGLE_TOL_DEG).
 BODY_OUTLINE = (-1.26, 1.30, 0.58)
 FORKS_OUTLINE = (1.30, 2.45, 0.45)
-PALLET_HALF = (0.50, 0.61)  # along the pallet's fork-entry axis, across it
+PALLET_HALF = (0.50, 0.61)  # 포크 진입 방향, 그 직각 방향
 FORK_SWEEP_DEG = 30.0
 FORK_SIDE_TOL_M = 0.10
 FORK_ANGLE_TOL_DEG = 6.0
@@ -165,7 +160,7 @@ def _outline(x, y, yaw_deg, ahead0, ahead1, half_width):
 
 
 def _overlap(c1, c2):
-    """Do two rectangles (4 corners each) overlap? Separating-axis test."""
+    """두 직사각형(꼭짓점 4개씩)이 겹치는가? 분리축 검사."""
     for c in (c1, c2):
         for e in (c[1] - c[0], c[2] - c[0]):
             axis = np.array([-e[1], e[0]])
@@ -176,8 +171,8 @@ def _overlap(c1, c2):
 
 
 def hits_pallet(x, y, yaw_deg, pallet, straight=False):
-    """Would the forklift at this pose bump the standing pallet (x, y, yaw_deg)? The body touching it, or the
-    forks reaching it swung more than FORK_SWEEP_DEG -- with `straight`, off-centre or askew at all."""
+    """이 자세의 지게차가 서 있는 파렛트(x, y, yaw_deg)에 부딪히는가? 차체가 닿거나 포크가 FORK_SWEEP_DEG 이상
+    비뚤게 닿으면 True. `straight`이면 조금이라도 중앙에서 벗어나거나 비뚤어도 True."""
     px, py, pyaw = pallet
     box = _outline(px, py, pyaw, -PALLET_HALF[0], PALLET_HALF[0], PALLET_HALF[1])
     if _overlap(_outline(x, y, yaw_deg, *BODY_OUTLINE), box):
@@ -192,8 +187,7 @@ def hits_pallet(x, y, yaw_deg, pallet, straight=False):
 
 
 def seated_pallet_ahead(rows):
-    """How far ahead of the forklift the pallet was when the person started lifting it, i.e. with the
-    forks all the way in (the pallet rests against the fork carriage)."""
+    """사람이 파렛트를 들기 시작할 때, 즉 포크가 끝까지 들어갔을 때(파렛트가 포크 캐리지에 닿음) 파렛트의 전방 거리."""
     z0 = float(rows[0]["pallet_z"])
     r = next((r for r in rows if float(r["pallet_z"]) > z0 + 0.05), None)
     if r is None:
@@ -202,7 +196,7 @@ def seated_pallet_ahead(rows):
 
 
 def learn(demos):
-    """demos: [(name, rows, meta)] -> dict saved as paths.json."""
+    """demos: [(name, rows, meta)] -> `paths.json`으로 저장할 dict."""
     out, seats = [], []
     for name, rows, meta in demos:
         segs = demo_segments(rows)
@@ -211,7 +205,7 @@ def learn(demos):
         k, contact = insertion(segs, rows)
         approach = None
         if contact is not None:
-            # pockets run along the pallet's local y; Lesson 1's forklift at yaw 0 drives along -y
+            # 파렛트 구멍은 파렛트 로컬 y 방향, Lesson 1 지게차는 yaw 0에서 -y 방향으로 주행
             off = (contact[2] - float(rows[0]["pallet_yaw_deg"])) % 180.0
             approach = round(min(off, 180.0 - off), 1)
         seat = seated_pallet_ahead(rows)
@@ -223,13 +217,13 @@ def learn(demos):
                     "contact": contact, "approach_deg": approach,
                     "usable": k is not None and approach is not None and approach <= MAX_APPROACH_DEG,
                     "segments": segs})
-    # forks fully in: the typical distance (median, so one crooked pickup does not move it)
+    # 포크가 끝까지 들어간 거리: 중앙값 (비뚤게 집은 시연 하나에 흔들리지 않도록)
     seat = float(np.median(seats)) if seats else None
     return {"version": 1, "seat_ahead_m": None if seat is None else round(seat, 3), "demos": out}
 
 
 def summary(paths):
-    """Numbers to show trainees: what the AI learned."""
+    """교육생에게 보여줄 수치: AI가 학습한 내용."""
     carry, place_lift, n_segs, length = [], [], [], []
     for d in paths["demos"]:
         lifts = [v for s in d["segments"] for v in s["lift"]] + [s["lift_after"] for s in d["segments"]]
@@ -242,26 +236,26 @@ def summary(paths):
             "segments": f(n_segs), "path_length_m": f(length)}
 
 
-# ---------------------------------------------------------------- following
+# ---------------------------------------------------------------- 경로 추종
 
 
 class PathFollower:
-    """Turns a learned route into key presses (call step() every frame)."""
+    """학습된 경로를 키 입력으로 바꾼다 (매 프레임 step() 호출)."""
 
     LOOKAHEAD_M = 0.7
     CRUISE_MPS = 0.6
-    STOP_DECEL = 0.5  # plan to slow down this gently before a segment end [m/s^2]
+    STOP_DECEL = 0.5  # 구간 끝 전에 이 정도로 완만하게 감속 [m/s^2]
     END_TOL_M = 0.06
     RATE_BAND_DEG = 0.5  # deg/s
     LIFT_TOL_M = 0.02
     STUCK_S = 8.0
 
     SEAT_MARGIN_M = 0.03
-    CREEP_MAX_M = 1.0  # past the demo's end, drive on at most this far to get the forks all the way in
-    CREEP_PUSH_M = 0.3  # ...but stop if the pallet came no closer over this much driving (just shoving it)
-    CREEP_REMAINING_M = 0.03  # creeping speed: as if this close to a stop (~0.25 m/s)
-    # Lift only once the forks are at least this share of the pallet's depth in: less leaves it hanging on the
-    # fork tips. Short of that, back straight out RETRY_BACK_M and push in once more, then give up.
+    CREEP_MAX_M = 1.0  # 시연 끝점을 지나 포크를 끝까지 넣으려고 최대 이만큼 더 전진
+    CREEP_PUSH_M = 0.3  # ...단, 이만큼 가도 파렛트가 가까워지지 않으면 멈춤 (밀고만 있는 것)
+    CREEP_REMAINING_M = 0.03  # 저속 전진 속도: 정지 지점까지 이만큼 남은 것처럼 (~0.25 m/s)
+    # 포크가 파렛트 깊이의 이 비율 이상 들어가야 들기 시작 (덜 들어가면 포크 끝에 걸림).
+    # 부족하면 RETRY_BACK_M만큼 똑바로 후진해 한 번 더 넣어 보고, 그래도 안 되면 포기.
     LIFT_MIN_INSERT = 0.8
     PALLET_DEPTH_M = 1.0
     RETRY_BACK_M = 0.6
@@ -273,21 +267,21 @@ class PathFollower:
         if lookahead_m is not None:
             self.LOOKAHEAD_M = lookahead_m
         self.segs = demo["segments"]
-        self.k = 0  # segment
-        self.i = 0  # progress index inside the segment
+        self.k = 0  # 구간
+        self.i = 0  # 구간 안의 진행 인덱스
         self.mode = "drive"
         self.done = False
         self.failed = None
         self._best = None
         self._since_progress = 0.0
-        self._turning = 0  # +1 holding the CCW key, -1 the CW key, 0 none
-        self._creep = None  # [x0, y0, closest pallet distance, distance driven when it was closest]
+        self._turning = 0  # +1 CCW 키 누름, -1 CW 키 누름, 0 없음
+        self._creep = None  # [x0, y0, 최소 파렛트 거리, 그때까지 주행 거리]
         self._retries = 0
-        self._back_from = None  # where backing out for another try started
+        self._back_from = None  # 재시도를 위해 후진을 시작한 위치
 
     def step(self, x, y, yaw_deg, speed, turn_rate_deg, lift, dt, pallet_ahead_m=None):
-        """Keys to hold this frame: dict key -> bool. `pallet_ahead_m`: how far ahead the pallet is
-        (None if unknown); on the way into the pallet the AI stops as soon as the forks are all the way in."""
+        """이번 프레임에 누를 키: dict key -> bool. `pallet_ahead_m`: 파렛트 전방 거리 (모르면 None).
+        파렛트 진입 중에는 포크가 끝까지 들어가는 즉시 멈춘다."""
         keys = {k: False for k in KEYS}
         if self.done or self.failed:
             return keys
@@ -295,7 +289,7 @@ class PathFollower:
         sx, sy, sl = np.asarray(seg["x"]), np.asarray(seg["y"]), np.asarray(seg["lift"])
         n = len(sx)
 
-        if self.mode == "back_off":  # forks not far enough in: straight back out, then in again
+        if self.mode == "back_off":  # 포크가 덜 들어감: 똑바로 후진한 뒤 다시 진입
             if math.hypot(x - self._back_from[0], y - self._back_from[1]) < self.RETRY_BACK_M:
                 if speed * seg["dir"] > -0.25:
                     keys["backward" if seg["dir"] > 0 else "forward"] = True
@@ -303,13 +297,13 @@ class PathFollower:
             self.mode = "drive"
 
         if self.mode == "drive":
-            # progress: nearest point ahead of where we were (never go back along the route)
+            # 진행: 이전 위치 앞쪽에서 가장 가까운 점 (경로상 뒤로 돌아가지 않음)
             lo, hi = self.i, min(n, self.i + 40)
             d2 = (sx[lo:hi] - x) ** 2 + (sy[lo:hi] - y) ** 2
             self.i = lo + int(np.argmin(d2))
             remaining = float(np.sum(np.hypot(np.diff(sx[self.i:]), np.diff(sy[self.i:])))) if self.i < n - 1 else 0.0
             end_dist = math.hypot(sx[-1] - x, sy[-1] - y)
-            # passed the end? (projection of the last step)
+            # 끝점을 지났는가? (마지막 스텝 방향으로 투영)
             if n >= 2:
                 ex, ey = sx[-1] - sx[-2], sy[-1] - sy[-2]
                 past = (x - sx[-1]) * ex + (y - sy[-1]) * ey > 0
@@ -319,11 +313,11 @@ class PathFollower:
                          and self.seat_ahead_m is not None)
             seated = inserting and pallet_ahead_m <= self.seat_ahead_m + self.SEAT_MARGIN_M
             at_end = (remaining < self.END_TOL_M and end_dist < 0.25) or (self.i >= n - 2 and past)
-            # The pallet may have slid further than in the demo: forks not all the way in at the demo's
-            # end point, so creep on along the same line (lifting now would leave it on the fork tips).
+            # 파렛트가 시연보다 더 밀렸을 수 있음: 시연 끝점에서 포크가 덜 들어갔으면 같은 방향으로 천천히 더 전진
+            # (지금 들면 포크 끝에 걸림).
             creeping = at_end and inserting and not seated and self._keep_creeping(x, y, pallet_ahead_m)
             if at_end and not creeping and inserting and not seated and not self._deep_enough(pallet_ahead_m):
-                # pushed in as far as it goes and the forks are still not LIFT_MIN_INSERT in: do not lift
+                # 끝까지 밀어 넣어도 포크가 LIFT_MIN_INSERT만큼 안 들어감: 들지 않음
                 if self._retries >= self.RETRIES:
                     self.failed = "not_inserted"
                     return keys
@@ -343,10 +337,10 @@ class PathFollower:
                     self._watch_progress(remaining, dt)
                 return keys
 
-        # settle: stop, set the fork height for what comes next, then start the next segment
+        # settle: 정지 -> 다음 단계용 포크 높이 맞춤 -> 다음 구간 시작
         if abs(speed) > 0.02:
             if seg["dir"] > 0 and speed > 0.15:
-                keys["backward"] = True  # brake
+                keys["backward"] = True  # 브레이크
             elif seg["dir"] < 0 and speed < -0.15:
                 keys["forward"] = True
             return keys
@@ -366,31 +360,31 @@ class PathFollower:
 
     def _drive(self, keys, seg, sx, sy, x, y, yaw_deg, speed, turn_rate_deg, remaining):
         d = seg["dir"]
-        # lookahead point
+        # lookahead 지점
         j, acc = self.i, 0.0
         while j < len(sx) - 1 and acc < self.LOOKAHEAD_M:
             acc += math.hypot(sx[j + 1] - sx[j], sy[j + 1] - sy[j])
             j += 1
         tx, ty = sx[j], sy[j]
-        if acc < self.LOOKAHEAD_M and len(sx) >= 2:  # extend past the end along the last direction
+        if acc < self.LOOKAHEAD_M and len(sx) >= 2:  # 끝점 너머는 마지막 방향으로 연장
             ex, ey = sx[-1] - sx[-2], sy[-1] - sy[-2]
             norm = math.hypot(ex, ey) or 1.0
             tx += ex / norm * (self.LOOKAHEAD_M - acc)
             ty += ey / norm * (self.LOOKAHEAD_M - acc)
         yaw = math.radians(yaw_deg)
-        fwd = (math.sin(yaw), -math.cos(yaw))  # Lesson 1 drives toward (sin yaw, -cos yaw)
-        mx, my = (fwd[0] * d, fwd[1] * d)  # direction of motion
-        lx, ly = -my, mx  # left of the motion direction
+        fwd = (math.sin(yaw), -math.cos(yaw))  # Lesson 1 전진 방향 = (sin yaw, -cos yaw)
+        mx, my = (fwd[0] * d, fwd[1] * d)  # 진행 방향
+        lx, ly = -my, mx  # 진행 방향의 왼쪽
         dx, dy = tx - x, ty - y
         ahead, left = dx * mx + dy * my, dx * lx + dy * ly
         ld2 = max(ahead * ahead + left * left, 1e-6)
-        curv = 2.0 * left / ld2  # pure pursuit, CCW positive along the motion
+        curv = 2.0 * left / ld2  # pure pursuit, 진행 방향 기준 CCW가 +
         curv = max(-MAX_CURV, min(MAX_CURV, curv))
-        # Lesson 1 only turns while Left/Right is held (released -> wheels recentre, turning stops), and
-        # the heading turns CCW at curvature * speed along the motion for either direction of travel.
-        # So steer by yaw rate: hold the key that pushes the current turn rate toward the wanted one.
-        # Releasing the key recentres the wheels at once, so keep holding it until the turn rate is
-        # clearly past the wanted one (hysteresis), and never let go while the route needs full lock.
+        # Lesson 1은 Left/Right를 누르고 있을 때만 회전 (떼면 바퀴가 즉시 중앙 복귀, 회전 멈춤).
+        # 진행 방향과 무관하게 heading은 곡률 * 진행 속도로 CCW 회전한다.
+        # 그래서 yaw rate로 조향: 현재 회전 속도를 목표 쪽으로 미는 키를 누른다.
+        # 떼는 순간 바퀴가 복귀하므로 회전 속도가 목표를 확실히 넘을 때까지 유지(히스테리시스)하고,
+        # 경로가 최대 조향을 요구하는 동안은 절대 떼지 않는다.
         v_along = speed * d
         want = math.degrees(curv * max(v_along, 0.05))
         band = self.RATE_BAND_DEG
@@ -406,20 +400,20 @@ class PathFollower:
                 self._turning = 1
             elif want < turn_rate_deg - band:
                 self._turning = -1
-        sgn = d if abs(speed) < 0.05 else (1 if speed > 0 else -1)  # Left turns CCW when moving forward
+        sgn = d if abs(speed) < 0.05 else (1 if speed > 0 else -1)  # 전진 중 Left = CCW 회전
         if self._turning:
             keys["left" if self._turning * sgn > 0 else "right"] = True
 
-        # speed: cruise, slow down to stop at the segment end, slower while turning hard
+        # 속도: 순항, 구간 끝에서 멈추도록 감속, 급회전 중에는 더 느리게
         v_target = min(self.CRUISE_MPS, math.sqrt(2 * self.STOP_DECEL * max(remaining, 0.0)) + 0.08)
         v_target *= 1.0 - 0.4 * abs(curv) / MAX_CURV
         if v_along < v_target - 0.03:
             keys["forward" if d > 0 else "backward"] = True
         elif v_along > v_target + 0.25:
-            keys["backward" if d > 0 else "forward"] = True  # brake
+            keys["backward" if d > 0 else "forward"] = True  # 브레이크
 
     def _deep_enough(self, pallet_ahead_m):
-        """Forks at least LIFT_MIN_INSERT of the pallet's depth in (seat_ahead_m = all the way in)?"""
+        """포크가 파렛트 깊이의 LIFT_MIN_INSERT 이상 들어갔는가? (seat_ahead_m = 끝까지 들어감)"""
         return pallet_ahead_m <= self.seat_ahead_m + (1.0 - self.LIFT_MIN_INSERT) * self.PALLET_DEPTH_M
 
     def _keep_creeping(self, x, y, pallet_ahead_m):
@@ -449,26 +443,25 @@ class PathFollower:
                 self.failed = "stuck"
 
 
-# ---------------------------------------------------------------- rehearsal
+# ---------------------------------------------------------------- 리허설
 
-FORK_REACH_M = 1.0  # how far ahead of the insertion point the fork tips are, inside the pallet
+FORK_REACH_M = 1.0  # 진입점 기준 포크 끝이 파렛트 안으로 들어가 있는 거리
 LOOKAHEADS_M = (0.5, 0.7, 1.0)
-COLLISION_EVERY = 3  # frames between collision checks (at most ~6 cm of travel)
+COLLISION_EVERY = 3  # 충돌 검사 간격 [프레임] (이동 거리 최대 ~6 cm)
 
-# Routes bent to start where the forklift is (see warp): the demonstrations that started nearest, with the
-# shift faded out over these shares of the way to the pallet; the last stretch before the forks met it stays
-# exactly as the person drove it.
+# 현재 위치에서 출발하도록 변형한 경로(warp 참고): 출발점이 가장 가까운 시연들로, 파렛트까지 거리의 이 비율에
+# 걸쳐 이동량을 서서히 줄인다. 포크가 파렛트에 닿기 직전 구간은 사람이 운전한 그대로 둔다.
 WARP_NEAREST = 6
 WARP_BLENDS = (0.5, 1.0)
 WARP_KEEP_M = 1.5
 WARP_MIN_SHIFT_M = 0.05
-# A route whose rehearsed fork tips would miss the pocket by more than this is not worth driving: the
-# forks would run past or into the side of the pallet (the pockets leave about this much play)
+# 리허설에서 포크 끝이 구멍을 이보다 크게 벗어나면 주행할 가치 없음: 포크가 파렛트 옆을 지나치거나 옆면에
+# 부딪힘 (구멍의 여유가 대략 이 정도)
 MAX_PLAN_MISS_M = 0.10
 
 
 class KinematicForklift:
-    """Lesson 1's key-driven forklift motion (forklift_omnigraph_nodes), without the scene."""
+    """Lesson 1의 키 조작 지게차 운동(forklift_omnigraph_nodes)을 씬 없이 재현."""
 
     def __init__(self, x, y, yaw_deg):
         self.x, self.y, self.yaw = x, y, yaw_deg
@@ -507,11 +500,10 @@ class KinematicForklift:
 
 
 def rehearse(demo, x, y, yaw_deg, lookahead_m, dt=1 / 60, t_max=120.0, blocked=None):
-    """Drive `demo` from this pose in the head (no simulation): sideways miss of the fork tips where
-    the person's forks met the pallet [m], or None if the drive would not get through.
-    dt = Isaac Sim's timeline step (60 per second). `blocked(old_pose, new_pose)` (poses = x, y, yaw_deg,
-    lift), if given, is Lesson 1's own collision test: a route that would run into a rack or pillar
-    is rejected (None)."""
+    """이 자세에서 `demo`를 머릿속으로 주행 (시뮬레이션 없음). 사람의 포크가 파렛트에 닿은 지점에서 포크 끝의
+    옆 방향 오차 [m] 반환, 통과하지 못하면 None.
+    dt = Isaac Sim timeline 스텝 (초당 60). `blocked(old_pose, new_pose)` (pose = x, y, yaw_deg, lift)는
+    Lesson 1 충돌 검사: 랙이나 기둥에 부딪히는 경로는 거부(None)."""
     k_ins = demo.get("insert_segment")
     if k_ins is None:
         return None
@@ -522,8 +514,8 @@ def rehearse(demo, x, y, yaw_deg, lookahead_m, dt=1 / 60, t_max=120.0, blocked=N
         fk.step(fol.step(fk.x, fk.y, fk.yaw, fk.speed, fk.turn_rate, fk.lift, dt), dt)
         t += dt
         n += 1
-        # collisions only matter on the way to the pallet: near the target shelf the clearances are a few cm,
-        # less than how far the real drive drifts from the rehearsal, so the test there is unreliable
+        # 충돌은 파렛트까지 가는 동안만 검사: 목표 선반 근처는 여유가 몇 cm로, 실제 주행과 리허설의 오차보다 작아
+        # 검사 결과를 믿을 수 없음
         if blocked is not None and n % COLLISION_EVERY == 0 and fol.k <= k_ins:
             pose = (fk.x, fk.y, fk.yaw, fk.lift)
             if blocked(last, pose):
@@ -533,26 +525,25 @@ def rehearse(demo, x, y, yaw_deg, lookahead_m, dt=1 / 60, t_max=120.0, blocked=N
             cx, cy, cyaw = demo["contact"]
             yr = math.radians(cyaw)
             ahead = math.sin(yr) * (fk.x - cx) - math.cos(yr) * (fk.y - cy)
-            if ahead >= 0.0 or fol.mode == "settle":  # reached the point where the person's forks met the pallet
+            if ahead >= 0.0 or fol.mode == "settle":  # 사람의 포크가 파렛트에 닿은 지점에 도달
                 side = abs(math.cos(yr) * (fk.x - cx) + math.sin(yr) * (fk.y - cy))
                 miss = side + FORK_REACH_M * abs(math.sin(_wrap(math.radians(fk.yaw - cyaw))))
         if miss is not None and fol.k > k_ins:
-            return miss  # past the pallet pickup nothing more is checked: the rest is the person's own route
+            return miss  # 파렛트를 집은 뒤로는 검사하지 않음: 나머지는 사람이 운전한 경로 그대로
     return miss if fol.done else None
 
 
 def warp(demo, x, y, blend_share):
-    """The demonstration's route bent to start at (x, y): every point moves by the start offset, fading
-    out smoothly (cosine) along the way, so the route keeps the person's shape and the last WARP_KEEP_M
-    before the forks met the pallet is exactly as recorded. None if it starts here already or there is
-    no room to fade the shift out. (The segments' recorded yaw is left as is; following uses x, y only.)"""
+    """시연 경로를 (x, y)에서 출발하도록 변형. 모든 점을 출발점 차이만큼 옮기되 경로를 따라 cosine으로 서서히
+    줄여서, 사람이 운전한 모양을 유지하고 포크가 파렛트에 닿기 전 마지막 WARP_KEEP_M은 녹화 그대로 둔다.
+    이미 여기서 출발하거나 이동량을 줄일 거리가 부족하면 None. (구간의 yaw는 그대로; 추종은 x, y만 사용)"""
     k_ins, contact = demo.get("insert_segment"), demo.get("contact")
     if k_ins is None or contact is None:
         return None
     dx, dy = x - demo["start"][0], y - demo["start"][1]
     if math.hypot(dx, dy) < WARP_MIN_SHIFT_M:
         return None
-    s_contact = 0.0  # distance along the route to where the forks met the pallet
+    s_contact = 0.0  # 포크가 파렛트에 닿은 지점까지의 경로상 거리
     for k, seg in enumerate(demo["segments"]):
         sx, sy = np.asarray(seg["x"]), np.asarray(seg["y"])
         ds = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(sx), np.diff(sy)))])
@@ -576,17 +567,15 @@ def warp(demo, x, y, blend_share):
 
 
 def plan(paths, x, y, yaw_deg, blocked=None, pallet=None, nearest=None, lookaheads=LOOKAHEADS_M):
-    """Rehearse every demonstration (with a few steering settings) from this pose and keep the one whose
-    forks would meet the pallet pocket most accurately and that does not run into anything: `blocked`
-    (Lesson 1's collision test) and, with `pallet` (x, y, yaw_deg), the standing pallet -- checked from the
-    most accurate down, since those tests are slower. Only if none of the people's routes gets through are
-    the nearest-starting ones bent to start right here (warp) and tried the same way; a bent route must
-    also bring its forks in straight (hits_pallet(straight=True)), since the bend ends shortly before the pallet.
+    """이 자세에서 모든 시연을 (조향 설정 몇 가지로) 리허설해, 포크가 파렛트 구멍에 가장 정확히 들어가고
+    아무것에도 부딪히지 않는 경로를 고른다. 충돌 검사(`blocked` = Lesson 1 충돌 검사, `pallet` (x, y, yaw_deg) =
+    서 있는 파렛트)는 느리므로 정확한 순서대로 확인한다. 사람 경로가 모두 실패할 때만 출발점이 가까운 시연을
+    현재 위치에서 출발하도록 변형(warp)해 같은 방식으로 시도한다. 변형은 파렛트 직전에 끝나므로 변형 경로는
+    포크도 곧게 들어가야 한다 (hits_pallet(straight=True)).
 
-    `nearest` / `lookaheads` narrow it to the demonstrations that started nearest / fewer steering settings
-    (a quicker look, see reposition).
+    `nearest` / `lookaheads`: 출발점이 가까운 시연 / 더 적은 조향 설정으로 좁혀 빠르게 확인 (reposition 참고).
 
-    Returns (demo, lookahead_m, miss_m, tried, rejected) -- demo is None if nothing got through.
+    (demo, lookahead_m, miss_m, tried, rejected) 반환. 통과한 경로가 없으면 demo는 None.
     """
     usable = [d for d in paths["demos"] if d.get("usable", True)]
     if nearest is not None:
@@ -618,37 +607,35 @@ def plan(paths, x, y, yaw_deg, blocked=None, pallet=None, nearest=None, lookahea
     return (*found, tried, rejected)
 
 
-# ---------------------------------------------------------------- repositioning
+# ---------------------------------------------------------------- 자리 고쳐 잡기
 
-# '자리 고쳐 잡기': think briefly, move a little, think again. From where the forklift stands, a quick look
-# (QUICK_DEMOS nearest demonstrations, one steering setting); no route -> the short move (APPROACH_MOVES) that
-# brings it closest to where the people's demonstrations started (position and heading, start_gap), then
-# look again from there, up to APPROACH_MAX_STEPS times.
-# A move is a list of steps (direction +1 / -1, steering key held or None, metres).
+# '자리 고쳐 잡기': 잠깐 생각하고, 조금 움직이고, 다시 생각한다. 현재 위치에서 빠르게 확인(가까운 시연
+# QUICK_DEMOS개, 조향 설정 1개) -> 경로가 없으면 시연 출발점(위치와 방향, start_gap)에 가장 가까워지는 짧은 이동
+# (APPROACH_MOVES)을 한 뒤 다시 확인. 최대 APPROACH_MAX_STEPS회.
+# 이동 = 스텝 목록 (방향 +1 / -1, 누르는 조향 키 또는 None, m).
 APPROACH_MOVES = (
     [(+1, None, 0.7)], [(-1, None, 0.7)], [(+1, None, 2.0)], [(+1, None, 3.0)], [(+1, None, 5.0)],
     [(+1, "left", 1.0)], [(+1, "right", 1.0)], [(-1, "left", 1.0)], [(-1, "right", 1.0)],
     [(+1, "left", 2.0)], [(+1, "right", 2.0)], [(-1, "left", 2.0)], [(-1, "right", 2.0)],
-    [(+1, "left", 3.6)], [(+1, "right", 3.6)], [(-1, "left", 3.6)], [(-1, "right", 3.6)],  # ~quarter turns
+    [(+1, "left", 3.6)], [(+1, "right", 3.6)], [(-1, "left", 3.6)], [(-1, "right", 3.6)],  # ~90도 회전
 )
 QUICK_DEMOS = 4
 QUICK_LOOKAHEADS_M = (0.7,)
 APPROACH_MAX_STEPS = 16
-APPROACH_MIN_GAIN_M = 0.05  # a move must bring the forklift at least this much closer (start_gap)
-GAP_M_PER_RAD = 1.0  # start_gap: heading difference counted as this many metres per radian -- when near:
-GAP_NEAR_M = 1.5  # farther away it counts less and less (turn toward the start freely, line up once there)
-REVERSE_COST = 0.3  # a move's reversing counts as this many metres of gap per metre (drive forward if it works)
-OPEN_M = 0.8  # a move ending closer than this to a rack or pillar counts NEAR_WALL_COST metres worse: heading
-NEAR_WALL_COST = 1.0  # into a wall because it is the shortest way leaves no room to turn afterwards
-# A repositioning move must keep this far from racks and pillars (the real drive slides a little further than the
-# rehearsal) -- unless the forklift already stands that close, then only real contact counts (else no way out)
+APPROACH_MIN_GAIN_M = 0.05  # 이동 한 번에 최소 이만큼 가까워져야 함 (start_gap)
+GAP_M_PER_RAD = 1.0  # start_gap: 방향 차이 1 rad를 이만큼의 m로 환산 -- 가까울 때 기준:
+GAP_NEAR_M = 1.5  # 멀수록 점점 덜 반영 (멀 때는 자유롭게 방향 전환, 도착해서 정렬)
+REVERSE_COST = 0.3  # 후진 1 m당 이만큼의 gap 페널티 (가능하면 전진)
+OPEN_M = 0.8  # 이동 끝이 랙/기둥과 이보다 가까우면 NEAR_WALL_COST만큼 불리: 최단 경로라고 벽으로
+NEAR_WALL_COST = 1.0  # 향하면 그 뒤 회전할 공간이 없음
+# 자리 고쳐 잡기 이동은 랙/기둥과 이 거리를 유지 (실제 주행은 리허설보다 조금 더 미끄러짐)
+# -- 이미 그만큼 가까이 서 있으면 실제 접촉만 검사 (아니면 빠져나올 수 없음)
 REPOSITION_MARGIN_M = 0.25
 REPOSITION_SPEED_MPS = 0.5
 
 
 class MoveDriver:
-    """Drives one short move with Lesson 1's keys: each step holds its direction key (and steering key) until it
-    has covered its distance, then lets go and coasts to a stop."""
+    """Lesson 1 키로 짧은 이동 하나를 주행: 스텝마다 방향 키(와 조향 키)를 거리만큼 누른 뒤 떼고 관성으로 정지."""
 
     def __init__(self, steps):
         self.steps = list(steps)
@@ -683,9 +670,9 @@ class MoveDriver:
 
 
 def rehearse_move(steps, x, y, yaw_deg, blocked=None, pallet=None, dt=1 / 60, t_max=20.0, collides=None, margin=0.0):
-    """Drive a short move in the head: the pose (x, y, yaw_deg) it ends at, or None if it runs into anything.
-    `collides(x, y, yaw_deg, lift)` (Lesson 1's pose test) is asked for the pose and, with `margin`, for it
-    shifted that far forward / back / left / right -- keeping the move that far from everything."""
+    """짧은 이동을 머릿속으로 주행: 끝 자세 (x, y, yaw_deg), 무언가에 부딪히면 None.
+    `collides(x, y, yaw_deg, lift)` (Lesson 1 자세 검사)는 해당 자세와, `margin`이 있으면 그만큼 앞/뒤/좌/우로
+    옮긴 자세도 검사한다 -- 즉 모든 것과 그 거리를 유지."""
     fk, mv = KinematicForklift(x, y, yaw_deg), MoveDriver(steps)
     t, n, last = 0.0, 0, (x, y, yaw_deg, 0.0)
     shifts = [(0.0, 0.0)] + ([(margin, 0.0), (-margin, 0.0), (0.0, margin), (0.0, -margin)] if margin > 0 else [])
@@ -707,8 +694,7 @@ def rehearse_move(steps, x, y, yaw_deg, blocked=None, pallet=None, dt=1 / 60, t_
 
 
 def start_gap(paths, x, y, yaw_deg):
-    """How far this pose is from the nearest place a person's demonstration started: metres, with the heading
-    difference counted GAP_M_PER_RAD metres per radian."""
+    """이 자세와 가장 가까운 시연 출발점 사이의 거리 [m]. 방향 차이는 1 rad당 GAP_M_PER_RAD m로 환산."""
     gaps = []
     for d in paths["demos"]:
         if not d.get("usable", True):
@@ -720,9 +706,9 @@ def start_gap(paths, x, y, yaw_deg):
 
 
 def approach_move(paths, x, y, yaw_deg, blocked=None, pallet=None, collides=None):
-    """The short move (APPROACH_MOVES, rehearsed, nothing hit) that brings the forklift closest to where the
-    demonstrations started: (steps, end pose), or None if none gets it APPROACH_MIN_GAIN_M closer. With
-    `collides` (Lesson 1's pose test) the move keeps REPOSITION_MARGIN_M from everything (see rehearse_move)."""
+    """시연 출발점에 가장 가까워지는 짧은 이동 (APPROACH_MOVES 중 리허설에서 충돌 없는 것): (steps, 끝 자세).
+    APPROACH_MIN_GAIN_M 이상 가까워지는 이동이 없으면 None. `collides` (Lesson 1 자세 검사)가 있으면
+    모든 것과 REPOSITION_MARGIN_M을 유지 (rehearse_move 참고)."""
     now = start_gap(paths, x, y, yaw_deg)
     margin = REPOSITION_MARGIN_M
     if collides is not None:
@@ -730,7 +716,7 @@ def approach_move(paths, x, y, yaw_deg, blocked=None, pallet=None, collides=None
         fx, fy, lx, ly = math.sin(yr), -math.cos(yr), math.cos(yr), math.sin(yr)
         if any(collides(x + fx * a + lx * s, y + fy * a + ly * s, yaw_deg, 0.0)
                for a, s in ((margin, 0.0), (-margin, 0.0), (0.0, margin), (0.0, -margin))):
-            margin = 0.0  # already that close: just do not touch anything on the way out
+            margin = 0.0  # 이미 그만큼 가까움: 빠져나가는 동안 닿지만 않으면 됨
     best = None
     for steps in APPROACH_MOVES:
         end = rehearse_move(steps, x, y, yaw_deg, blocked=None if collides is not None else blocked, pallet=pallet,
@@ -752,7 +738,7 @@ def approach_move(paths, x, y, yaw_deg, blocked=None, pallet=None, collides=None
 
 
 def describe_move(steps):
-    """Korean for the panel, e.g. '후진 1.5 m (왼쪽으로 꺾어서) → 후진 1.5 m (오른쪽으로 꺾어서)'."""
+    """패널 표시용 한국어 문구, 예: '후진 1.5 m (왼쪽으로 꺾어서) → 후진 1.5 m (오른쪽으로 꺾어서)'."""
     turn = {None: "", "left": " (왼쪽으로 꺾어서)", "right": " (오른쪽으로 꺾어서)"}
     return " → ".join(f"{'전진' if d > 0 else '후진'} {dist:.1f} m{turn[t]}" for d, t, dist in steps)
 

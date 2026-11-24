@@ -34,9 +34,8 @@ DRIVER_VIEW_CAMERA_PATH = f"{FORKLIFT_PATH}/DriverViewCamera"
 LEFT_VIEW_CAMERA_PATH = f"{FORKLIFT_PATH}/LeftViewCamera"
 RIGHT_VIEW_CAMERA_PATH = f"{FORKLIFT_PATH}/RightViewCamera"
 CAMERA_CYCLE_PATHS = [DRIVER_VIEW_CAMERA_PATH, LEFT_VIEW_CAMERA_PATH, RIGHT_VIEW_CAMERA_PATH]
-# Each vehicle camera's mount transform (relative to the forklift), registered when the cameras are created.
-# Switching to a camera puts it back there, so flying the viewport around while looking through one camera
-# doesn't leave it moved the next time it comes around.
+# 차량 카메라별 장착 위치(지게차 기준 transform). 카메라 생성 시 등록한다.
+# 카메라 전환 시 이 위치로 되돌려, 뷰포트 조작으로 옮겨진 카메라가 다음 순환 때 그대로 남지 않게 한다.
 CAMERA_HOME_TRANSFORMS = {}
 FORK_PATHS = [f"{GEOMETRY_PATH}/sm_fork1_c01_obj_00", f"{GEOMETRY_PATH}/sm_fork2_c01_obj_00"]
 MAST_LIFT_PATHS = [f"{GEOMETRY_PATH}/sm_mast_stage3_c01_obj_00", f"{GEOMETRY_PATH}/sm_mast_stage4_c01_obj_00"]
@@ -270,9 +269,8 @@ def _measure_vehicle_boxes(stage):
     forklift = stage.GetPrimAtPath(FORKLIFT_PATH)
     if not forklift.IsValid():
         return None
-    # Measured straight in the forklift's own frame from each mesh's local extent. (BBoxCache bounds go
-    # through a world-aligned box, which grows with the forklift's heading -- ~2x at 300 deg -- and then
-    # blocks moves that are visibly clear.)
+    # 각 메시의 local extent로 지게차 좌표계에서 직접 측정한다. BBoxCache는 월드 축 정렬 박스라
+    # 지게차 방향에 따라 커지고(300 deg에서 약 2배) 실제로는 비어 있는 이동까지 막는다.
     xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
     world_to_forklift = xform_cache.GetLocalToWorldTransform(forklift).GetInverse()
     lift_offset = _lift_offset(stage)
@@ -560,8 +558,8 @@ def _cycle_camera_view(is_pressed):
 
 
 def register_forklift_node_types():
-    # The node type names below keep Lv1 Lesson 3's prefix on purpose: the scene files' Action Graph refers to
-    # them by these names (this lesson is a copy of that one).
+    # 아래 노드 타입 이름은 일부러 Lv1 Lesson 3 접두사를 유지한다. 씬 파일의 Action Graph가 이 이름으로 참조한다
+    # (이 레슨은 Lv1 Lesson 3 복사본).
     if _REGISTERED_NODE_TYPES:
         return
 

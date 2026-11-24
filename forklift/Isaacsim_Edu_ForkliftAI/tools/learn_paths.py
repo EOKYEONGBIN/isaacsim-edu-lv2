@@ -1,12 +1,11 @@
-"""Learn driving routes from the recorded demonstrations.
+"""녹화한 시연에서 주행 경로를 학습합니다.
 
-    python learn_paths.py                  (defaults below; numpy only, e.g. inside yolo-venv)
-    python learn_paths.py --name my_forklift   (-> models\\my_forklift\\paths.json: an 'AI 모델' of its own)
+    python learn_paths.py                  (기본값 사용, numpy만 필요. 예: yolo-venv 안에서)
+    python learn_paths.py --name my_forklift   (-> models\\my_forklift\\paths.json: 별도의 'AI 모델')
     python learn_paths.py --demos D:\\demos
 
-From every successful demonstration it keeps the route (forward / reverse segments, tiny
-back-and-forth corrections removed) and the fork height along it, then checks each route by
-driving it in the head from its own start. Isaac Sim reads the result (models\\paths.json).
+성공한 시연마다 경로(전진/후진 구간, 짧은 앞뒤 보정은 제거)와 포크 높이를 저장하고,
+각 경로를 자기 출발점에서 가상으로 주행해 검증합니다. 결과(models\\paths.json)는 Isaac Sim이 읽습니다.
 """
 
 import argparse
@@ -17,7 +16,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-ROOT = HERE.parents[4]  # the folder that holds isaacsim-edu-lv2 (training VM: E:\omniverse\content)
+ROOT = HERE.parents[4]  # isaacsim-edu-lv2를 담고 있는 폴더 (교육용 VM: E:\omniverse\content)
 spec = importlib.util.spec_from_file_location("paths", HERE.parents[1] / "Isaacsim_Edu_ForkliftAI" / "paths.py")
 P = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(P)
@@ -72,7 +71,7 @@ def main():
           f"경로 길이 평균 {s['path_length_m'][0]} m")
     if paths["seat_ahead_m"] is not None:
         print(f"포크가 끝까지 들어갔을 때 파렛트 중심까지 거리: {paths['seat_ahead_m']} m (이 거리가 되면 멈추고 들어 올립니다)")
-    # what the YOLO box says about the distance: from the boxes the recorder saved with each image
+    # YOLO 박스 → 거리 표: 녹화기가 이미지마다 저장한 박스로 학습
     paths["vision"], n = V.learn_table([args.demos / name for name, _, _ in demos], P.pallet_ahead)
     if paths["vision"]:
         far = paths["vision"]["far"]

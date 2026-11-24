@@ -1,4 +1,4 @@
-"""Forklift AI: record human demonstrations and let the AI drive, in a copy of the Lesson 1 forklift scene."""
+"""지게차 AI: Lesson 1 지게차 장면의 복사본에서 사람의 시연을 녹화하고 AI가 운전하게 한다."""
 
 import asyncio
 import datetime
@@ -28,16 +28,16 @@ from .vision import newest_model
 from .window import PANEL_SIGN, ForkliftAIWindow
 
 MODELS_DIR = ROOT / "forklift_ai" / "models"
-PATHS_FILE = MODELS_DIR / "paths.json"  # learn_paths.py without --name: the '기본' AI model
-RUNS_DIR = ROOT / "forklift_ai" / "runs"  # YOLO training output (runs/<name>/weights/best.onnx)
+PATHS_FILE = MODELS_DIR / "paths.json"  # --name 없이 실행한 learn_paths.py 결과: '기본' AI 모델
+RUNS_DIR = ROOT / "forklift_ai" / "runs"  # YOLO 학습 출력 (runs/<name>/weights/best.onnx)
 DEFAULT_MODEL = "기본"
 
 
 def list_ai_models():
-    """The AI models the panel offers: models/paths.json ('기본') and every models/<name>/paths.json
-    (learn_paths.py --name <name>). Each pairs with a YOLO model: models/<name>/best.onnx, else the YOLO run of
-    the same name (runs/<name>/weights/best.onnx), else the newest YOLO run.
-    Returns [{"name", "paths", "yolo", "mtime"}]."""
+    """패널에 보여 줄 AI 모델 목록: models/paths.json('기본')과 모든 models/<name>/paths.json
+    (learn_paths.py --name <name>). YOLO 모델은 models/<name>/best.onnx → 같은 이름의 YOLO run
+    (runs/<name>/weights/best.onnx) → 가장 최근 YOLO run 순으로 짝짓는다.
+    반환: [{"name", "paths", "yolo", "mtime"}]."""
     found = [(DEFAULT_MODEL, PATHS_FILE, None)] if PATHS_FILE.exists() else []
     found += [(p.parent.name, p, p.parent) for p in sorted(MODELS_DIR.glob("*/paths.json"))]
     newest = newest_model(RUNS_DIR)
@@ -51,21 +51,20 @@ def list_ai_models():
             continue
         models.append({"name": name, "paths": paths, "yolo": yolo, "mtime": mtime})
     return models
-# This practice's own copy of the Lesson 1 scene (same folder, so the asset references still resolve);
-# edit it freely without touching Lesson 1.
+# 이 실습 전용 Lesson 1 장면 복사본(같은 폴더라 asset 참조가 그대로 동작). Lesson 1에 영향 없이 수정 가능.
 SCENE_FILE = ROOT / "iw_hub_warehouse_navigation" / "iw_hub_warehouse_forklift_ai.usd"
 
 LOG = "[Isaacsim_Edu_ForkliftAI]"
-START_WAIT_FRAMES = 3  # a recording begins this many frames after Play: the overlap test needs physics running
-START_DRAWS = 30  # '랜덤': a start overlapping something is drawn again at most this often
-# This is Lesson 2 in the AZ Edu Lv2 launcher (crash recovery resumes the lesson recorded here).
+START_WAIT_FRAMES = 3  # Play 후 이 프레임 수만큼 지나서 녹화 시작: 겹침 검사에 물리 실행이 필요
+START_DRAWS = 30  # '랜덤': 무언가와 겹치는 출발 위치는 최대 이 횟수만큼 다시 뽑음
+# AZ Edu Lv2 런처에서 Lesson 2 (크래시 복구 시 여기 기록된 레슨을 다시 연다).
 SETTING_ACTIVE_LESSON = "/persistent/exts/Isaacsim_Edu_Lv2/active_lesson"
-# Lesson 1's driving keys, for the panel's key display
+# 패널 키 표시용 Lesson 1 주행 키
 KEY_PATHS = {"forward": fon.KEY_FORWARD_PATH, "backward": fon.KEY_BACKWARD_PATH, "left": fon.KEY_LEFT_PATH,
              "right": fon.KEY_RIGHT_PATH, "lift_up": fon.KEY_LIFT_UP_PATH, "lift_down": fon.KEY_LIFT_DOWN_PATH}
-# The forklift starts at the scene's own start pose moved by the panel's X/Y offset sliders (heading
-# unchanged). Scene layout (forklift-AI copy): rack front x 0.22 | pallet x 1.22-2.22 | forklift x 6.47,
-# all on y -1.0; the far rack behind the forklift begins around x 8.1.
+# 지게차 출발 위치 = 장면의 기본 출발 자세 + 패널의 X/Y 오프셋 슬라이더(방향은 그대로).
+# 장면 배치(지게차 AI 복사본): 선반 앞면 x 0.22 | 파렛트 x 1.22-2.22 | 지게차 x 6.47, 모두 y -1.0.
+# 지게차 뒤쪽의 먼 선반은 x 8.1 부근부터 시작.
 
 
 class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
@@ -74,7 +73,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._recorder = DemoRecorder()
         self._last_dir = None
         self._pending_start = False
-        self._start_redraw = False  # '랜덤' recording: draw the start again if it overlaps something
+        self._start_redraw = False  # '랜덤' 녹화: 출발 위치가 무언가와 겹치면 다시 뽑기
         self._window = ForkliftAIWindow({
             "start": self._on_start,
             "stop": self._on_stop,
@@ -90,20 +89,19 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             "open_model_folder": self._on_open_model_folder,
             "free_changed": self._on_free_changed,
         })
-        self._base_pose = None  # (x, y, z, yaw_deg) the scene starts the forklift at
-        self._pallet_base = {}  # prim path -> (translate op, scene value, parent world->local) of the pallet / its boxes
+        self._base_pose = None  # 장면이 지게차를 두는 출발 자세 (x, y, z, yaw_deg)
+        self._pallet_base = {}  # prim 경로 -> 파렛트/박스의 (translate op, 장면 값, 부모 world->local)
         self._reapply_frames = 0
         self._driver = None
         self._ai_pending = False
-        self._ai_scene_held = False  # a finished AI drive's paused end scene is on screen until Stop
+        self._ai_scene_held = False  # 끝난 AI 운전의 일시 정지된 마지막 장면을 Stop 전까지 표시 중
         self._ai_task = None
-        self._ai_run_info = None  # what the running AI drive started with, for its row in the AI run table
-        # '위치 자유': (x, y, yaw_deg) where the forklift was put by hand -- taken when the option is turned on and
-        # each time a recording / AI drive starts from a stopped scene; recordings and AI drives start there and
-        # Stop / 'AI 멈춤' bring the forklift back there (instead of the sliders' pose)
+        self._ai_run_info = None  # 실행 중인 AI 운전의 시작 조건 (AI 운전 기록 표의 한 행)
+        # '위치 자유': 손으로 옮겨 놓은 지게차의 (x, y, yaw_deg). 옵션을 켤 때와, 정지 상태에서 녹화/AI 운전을 시작할 때마다
+        # 저장. 녹화와 AI 운전은 여기서 출발하고, Stop / 'AI 멈춤'도 슬라이더 자세 대신 여기로 되돌린다
         self._free_pose = None
-        self._watch = None  # (demos folder, AI models) last seen, to refresh the panel
-        self._ai_models = []  # list_ai_models(), as last shown in the panel's 'AI 모델' list
+        self._watch = None  # 패널 갱신용으로 마지막에 본 (시연 폴더, AI 모델)
+        self._ai_models = []  # 패널 'AI 모델' 목록에 마지막으로 보여 준 list_ai_models()
         self._watch_t = 0.0
         self._keys_shown = False
         self._refresh_summary()
@@ -121,7 +119,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
     def on_shutdown(self):
         stage = self._stage()
         if stage is not None and self._pallet_base and omni.timeline.get_timeline_interface().is_stopped():
-            self._apply_pallet(stage, back=0.0)  # leave the pallet where the scene file has it
+            self._apply_pallet(stage, back=0.0)  # 파렛트를 장면 파일의 위치로 되돌려 둠
         if self._open_task is not None and not self._open_task.done():
             self._open_task.cancel()
         self._open_task = None
@@ -138,16 +136,16 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._window.destroy()
             self._window = None
 
-    # ---------------------------------------------------------------- scene
+    # ---------------------------------------------------------------- 장면
 
     async def _open_scene(self):
-        """Open this practice's scene copy. Lesson 1 is only a dependency here (the forklift's controls):
-        it doesn't open its own scene or panel while this extension is enabled."""
+        """이 실습의 장면 복사본을 연다. Lesson 1은 지게차 조작용 의존성일 뿐이며,
+        이 익스텐션이 켜져 있으면 자체 장면이나 패널을 열지 않는다."""
         app = omni.kit.app.get_app()
         ctx = omni.usd.get_context()
-        for _ in range(10):  # same settling wait as Lesson 1's own scene open
+        for _ in range(10):  # Lesson 1의 장면 열기와 같은 안정화 대기
             await app.next_update_async()
-        for _ in range(1800):  # up to ~30 s: opening while another scene still loads fails (UsdContext busy)
+        for _ in range(1800):  # 최대 ~30 s: 다른 장면 로딩 중에 열면 실패 (UsdContext busy)
             if ctx.can_open_stage():
                 break
             await app.next_update_async()
@@ -159,8 +157,8 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
                 if self._window:
                     self._window.set_last(f"실습 장면 파일이 없습니다: {SCENE_FILE}", ok=False)
                 return
-            fon.register_forklift_node_types()  # the scene's Action Graph uses Lesson 1's node types
-            for _ in range(5):  # retry if another scene was still loading ("UsdContext busy")
+            fon.register_forklift_node_types()  # 장면의 Action Graph가 Lesson 1의 노드 타입을 사용
+            for _ in range(5):  # 다른 장면이 아직 로딩 중이면 재시도 ("UsdContext busy")
                 ok, _err = await ctx.open_stage_async(str(SCENE_FILE).replace("\\", "/"))
                 if ok:
                     break
@@ -169,7 +167,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if self._window:
             self._window.deferred_dock_in("AZ Edu Lv2", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
 
-    # ---------------------------------------------------------------- helpers
+    # ---------------------------------------------------------------- 헬퍼
 
     def _stage(self):
         return omni.usd.get_context().get_stage()
@@ -184,7 +182,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._window.set_demos(list_demos(), (self._base_pose[0], self._base_pose[1], self._base_pose[3]) if self._base_pose else None)
 
     def _watch_files(self):
-        """Pick up new recordings and newly learned AI models (paths.json / YOLO) without restarting."""
+        """재시작 없이 새 녹화와 새로 학습된 AI 모델(paths.json / YOLO)을 반영한다."""
         def mtime(path):
             try:
                 return os.stat(path).st_mtime
@@ -200,7 +198,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
                 self._refresh_model_info()
 
     def _show_keys(self, stage):
-        """Light up the panel's key display with the driving keys held right now (the AI's or the person's)."""
+        """패널 키 표시에 지금 눌린 주행 키(AI 또는 사람)를 켠다."""
         if not self._window:
             return
         if stage is None:
@@ -211,7 +209,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._window.set_keys({name: fon._is_key_down(stage, path) for name, path in KEY_PATHS.items()})
         self._keys_shown = True
 
-    # ---------------------------------------------------------------- start position
+    # ---------------------------------------------------------------- 출발 위치
 
     def _on_stage_event(self, event):
         if event.type == int(omni.usd.StageEventType.OPENED):
@@ -219,7 +217,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._capture_base_pose()
 
     def _capture_base_pose(self):
-        """Remember where the scene file starts the forklift (read while nothing has moved it)."""
+        """장면 파일의 지게차 출발 자세를 기억한다(아무것도 움직이기 전에 읽음)."""
         stage = self._stage()
         if not self._scene_ready(stage) or not omni.timeline.get_timeline_interface().is_stopped():
             return
@@ -228,12 +226,12 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         rot = prim.GetAttribute("xformOp:rotateXYZ").Get()
         self._base_pose = (float(pos[0]), float(pos[1]), float(pos[2]), float(rot[2]))
         self._capture_pallet_base(stage)
-        self._refresh_summary()  # the table shows each recording's start relative to this pose
-        self._refresh_model_info()  # the panel is built by now (on_startup's call came before it existed)
+        self._refresh_summary()  # 표에 각 녹화의 출발 위치를 이 자세 기준으로 표시
+        self._refresh_model_info()  # 이제 패널이 만들어져 있음 (on_startup의 호출은 패널 생성 전)
         self._apply_start(stage)
 
     def _apply_start(self, stage):
-        """Put the forklift at the scene's start pose + the panel's offset."""
+        """지게차를 장면 출발 자세 + 패널 오프셋 위치에 놓는다."""
         if self._base_pose is None:
             self._capture_base_pose()
             if self._base_pose is None:
@@ -250,10 +248,9 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._apply_pallet(stage)
 
     def _capture_pallet_base(self, stage):
-        """Where the scene file puts the pallet and the boxes on it. They are moved the way the forklift's
-        start is (an edit on the scene's own layer): moved in the session layer instead, the pallet's
-        colliders stopped meeting the forks (they drove right through it). A leftover session-layer offset
-        from that is cleared first."""
+        """장면 파일의 파렛트와 그 위 박스 위치를 기억한다. 지게차 출발 위치처럼 장면 자체 layer에서 편집해 옮긴다:
+        session layer에서 옮기면 파렛트 collider가 포크와 충돌하지 않았다(포크가 그대로 통과).
+        그때 남은 session layer 오프셋은 먼저 지운다."""
         self._pallet_base = {}
         for path in (PALLET_PATH, PALLET_BOXES_PATH):
             prim = stage.GetPrimAtPath(path)
@@ -269,8 +266,8 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._pallet_base[path] = (op, op.Get(), to_parent)
 
     def _apply_pallet(self, stage, back=None):
-        """Move the pallet (and its boxes) straight back by the panel's '파렛트 뒤로' (or `back` metres) --
-        away from the forklift, which faces the scene's -X, so back is -X too."""
+        """파렛트(와 박스)를 패널의 '파렛트 뒤로'(또는 `back` m)만큼 지게차에서 멀어지게 똑바로 민다.
+        지게차가 장면의 -X를 향하므로 뒤쪽도 -X."""
         if back is None:
             back = self._window.pallet_back if self._window else 0.0
         for op, base, to_parent in self._pallet_base.values():
@@ -282,14 +279,13 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
                 op.Set(value)
 
     def _capture_free_pose(self, stage):
-        """'위치 자유': remember where the forklift stands now (put there by hand) as the place to start from and
-        to come back to."""
+        """'위치 자유': 지금 (손으로 옮겨 놓은) 지게차 위치를 출발·복귀 위치로 기억한다."""
         if self._scene_ready(stage):
             s = forklift_state(stage)
             self._free_pose = (s["x"], s["y"], s["yaw_deg"])
 
     def _reset_start(self, stage):
-        """Where a stopped scene puts the forklift: the '위치 자유' pose if that option is on, else the sliders'."""
+        """정지 상태에서 지게차를 둘 위치: '위치 자유'가 켜져 있으면 그 자세, 아니면 슬라이더 자세."""
         if self._window and self._window.free_start and self._free_pose is not None and self._base_pose:
             self._place_forklift_free(stage)
         else:
@@ -303,11 +299,10 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._capture_free_pose(stage)
         else:
             self._free_pose = None
-            self._apply_start(stage)  # back to the sliders' pose
+            self._apply_start(stage)  # 슬라이더 자세로 복귀
 
     def _place_forklift_free(self, stage):
-        """'위치 자유': the forklift at the remembered pose -- on the floor (the scene's height) and upright,
-        only its x, y and heading kept."""
+        """'위치 자유': 기억한 자세에 지게차를 놓는다. x, y, 방향만 유지하고 높이는 장면 값, 자세는 똑바로."""
         prim = stage.GetPrimAtPath(fon.FORKLIFT_PATH)
         if not prim.IsValid() or self._base_pose is None:
             return
@@ -318,9 +313,9 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._apply_pallet(stage)
 
     def _clear_start(self, stage, redraw):
-        """With the simulation running (the overlap test asks the physics scene): None if the forklift
-        overlaps nothing where it stands, else why it cannot start (Korean). With `redraw` ('랜덤') new random
-        starts are drawn -- and the forklift put there -- until one overlaps nothing."""
+        """시뮬레이션 실행 중에 호출(겹침 검사가 물리 scene에 묻기 때문). 지게차가 아무것과도 겹치지 않으면 None,
+        아니면 출발할 수 없는 이유(한국어). `redraw`('랜덤')이면 겹치지 않을 때까지 새 랜덤 출발 위치를 뽑아
+        지게차를 옮긴다."""
         for attempt in range(START_DRAWS + 1 if redraw else 1):
             if attempt:
                 self._window.randomize_start()
@@ -336,16 +331,16 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
     def _on_start_changed(self):
         stage = self._stage()
         if self._scene_ready(stage) and omni.timeline.get_timeline_interface().is_stopped():
-            if self._window.free_start:  # '위치 자유': leave the forklift where it was put by hand
+            if self._window.free_start:  # '위치 자유': 손으로 놓은 위치 그대로
                 self._apply_pallet(stage)
             else:
-                self._apply_start(stage)  # preview: the forklift moves as the slider moves
+                self._apply_start(stage)  # 미리보기: 슬라이더를 움직이면 지게차도 따라 움직임
 
-    # ---------------------------------------------------------------- buttons
+    # ---------------------------------------------------------------- 버튼
 
     def _on_start(self):
         if self._ai_scene_held or (self._driver is not None and (self._driver.active or self._ai_pending)):
-            return  # no recording while the AI drives or its end scene is kept (the button is off then too)
+            return  # AI 운전 중이거나 그 마지막 장면을 유지하는 동안은 녹화 불가 (버튼도 꺼져 있음)
         stage = self._stage()
         if not self._scene_ready(stage):
             self._window.set_last("지게차 AI 장면(파렛트·선반 포함)이 열려 있지 않습니다.", ok=False)
@@ -353,15 +348,14 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         timeline = omni.timeline.get_timeline_interface()
         self._start_redraw = False
         if not timeline.is_playing():
-            # people's demonstrations are always recorded with the pallet where the scene puts it: the routes
-            # the AI learns from them only fit that pallet position
-            if self._window.free_start:  # '위치 자유': record from where the forklift was put by hand
+            # 사람의 시연은 항상 장면 기본 파렛트 위치에서 녹화: 거기서 학습한 경로는 그 파렛트 위치에만 맞음
+            if self._window.free_start:  # '위치 자유': 손으로 놓은 위치에서 녹화
                 if timeline.is_stopped():
                     self._capture_free_pose(stage)
             self._window.set_pallet_back(0.0)
             if self._window.random_start:
-                self._start_redraw = True  # drawn again once physics runs if it overlaps something
-                self._window.randomize_start()  # '랜덤': a new start each recording, shown on the sliders
+                self._start_redraw = True  # 물리가 돈 뒤 무언가와 겹치면 다시 뽑음
+                self._window.randomize_start()  # '랜덤': 녹화마다 새 출발 위치, 슬라이더에 표시
             self._reset_start(stage)
             viewport = vp_util.get_active_viewport()
             if viewport is not None:
@@ -369,7 +363,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
                 viewport.camera_path = Sdf.Path(fon.DRIVER_VIEW_CAMERA_PATH)
             fon.reset_drive_state()
             timeline.play()
-        self._pending_start = START_WAIT_FRAMES  # begin once the simulation (and its overlap test) is running
+        self._pending_start = START_WAIT_FRAMES  # 시뮬레이션(과 겹침 검사)이 돌기 시작하면 녹화 시작
         self._window.set_recording(True)
         self._window.set_last("")
 
@@ -397,10 +391,10 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             viewport.camera_path = Sdf.Path(ensure_ai_camera(stage))
         self._window.set_camera_button(not showing_ai)
 
-    # ---------------------------------------------------------------- AI driving
+    # ---------------------------------------------------------------- AI 운전
 
     def _selected_model(self):
-        """The AI model picked in the panel (a list_ai_models() entry), or None."""
+        """패널에서 고른 AI 모델(list_ai_models() 항목), 없으면 None."""
         name = self._window.ai_model_name if self._window else None
         return next((m for m in self._ai_models if m["name"] == name), None)
 
@@ -447,7 +441,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
 
     def _on_ai_start(self):
         if self._driver is not None and self._driver.active:
-            self._toggle_ai_pause()  # while driving the button is 'AI 일시 정지' / 'AI 다시 시작'
+            self._toggle_ai_pause()  # 운전 중에는 이 버튼이 'AI 일시 정지' / 'AI 다시 시작'
             return
         stage = self._stage()
         if not self._scene_ready(stage):
@@ -460,17 +454,17 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if self._recorder.active:
             return
         if self._window.random_start:
-            # '랜덤': a new start (and pallet position) each AI drive -- with '위치 자유' only the pallet's
+            # '랜덤': AI 운전마다 새 출발 위치(와 파렛트 위치). '위치 자유'면 파렛트 위치만
             self._window.randomize_start(pallet=True, forklift=not self._window.free_start)
         if self._driver is not None:
             self._driver.stop()
         eyes = self._window.eyes_mode
         model = selected["yolo"] if eyes == "yolo" else None
         try:
-            # 'YOLO로 파렛트 거리 재기' on without a trained model drives as if it were off (the panel says so)
+            # 학습된 모델 없이 'YOLO로 파렛트 거리 재기'를 켜면 끈 것처럼 운전 (패널에 안내)
             self._driver = AIDriver(selected["paths"], model, blind=eyes == "none" or model is None,
                                     reposition=self._window.allow_reposition)
-        except Exception as e:  # noqa: BLE001 - e.g. the ONNX model could not be loaded
+        except Exception as e:  # noqa: BLE001 - 예: ONNX 모델 로드 실패
             carb.log_error(f"{LOG} could not start the AI driver: {e}")
             self._window.set_ai(False, f"AI를 준비하지 못했습니다: {e}", ok=False)
             self._driver = None
@@ -478,9 +472,9 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._refresh_model_info()
         dx, dy = self._window.start_offset
         yaw = (self._base_pose[3] if self._base_pose else 0.0) + self._window.start_yaw
-        if self._window.free_start and self._base_pose:  # '위치 자유': start where the forklift was put by hand
+        if self._window.free_start and self._base_pose:  # '위치 자유': 손으로 놓은 위치에서 출발
             if omni.timeline.get_timeline_interface().is_stopped() or self._free_pose is None:
-                self._capture_free_pose(stage)  # (a paused end scene keeps the pose the last drive started from)
+                self._capture_free_pose(stage)  # (일시 정지된 마지막 장면이면 직전 운전의 출발 자세 유지)
             fx, fy, fyaw = self._free_pose
             dx, dy, yaw = fx - self._base_pose[0], fy - self._base_pose[1], fyaw
         self._ai_run_info = {"when": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -493,8 +487,8 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._ai_task = asyncio.ensure_future(self._start_ai_run())
 
     async def _start_ai_run(self):
-        """Every AI run starts from a clean scene: Stop (Lesson 1 resets the forklift, physics resets the
-        pallet), let that stop event be handled, then place the forklift and Play."""
+        """AI 운전은 항상 깨끗한 장면에서 시작: Stop(Lesson 1이 지게차를, 물리가 파렛트를 리셋)하고
+        그 stop 이벤트가 처리되길 기다린 뒤 지게차를 놓고 Play."""
         app = omni.kit.app.get_app()
         timeline = omni.timeline.get_timeline_interface()
         if not timeline.is_stopped():
@@ -502,14 +496,14 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             for _ in range(5):
                 await app.next_update_async()
         stage = self._stage()
-        self._reset_start(stage)  # Stop put it back at the scene's start: the sliders' pose or the '위치 자유' pose
+        self._reset_start(stage)  # Stop이 장면 출발점으로 되돌렸으니 슬라이더 자세나 '위치 자유' 자세로 다시 놓음
         viewport = vp_util.get_active_viewport()
         if viewport is not None:
             fon.reset_camera_to_home(stage, fon.DRIVER_VIEW_CAMERA_PATH)
             viewport.camera_path = Sdf.Path(fon.DRIVER_VIEW_CAMERA_PATH)
         fon.reset_drive_state()
         self._window.set_ai(True, "출발 전에 학습한 경로들을 머릿속으로 연습해 보는 중...")
-        timeline.play()  # the rehearsal's collision test asks the running physics scene
+        timeline.play()  # 리허설의 충돌 검사가 실행 중인 물리 scene에 묻기 때문
         for _ in range(3):
             await app.next_update_async()
         if self._driver is None or not timeline.is_playing():
@@ -519,7 +513,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if problem:
             self._end_ai(f"실패: {problem}", ok=False, stop_timeline=True, result="출발 불가")
             return
-        if redraw and self._ai_run_info:  # the start may have been drawn again: log where it really set off
+        if redraw and self._ai_run_info:  # 출발 위치를 다시 뽑았을 수 있음: 실제 출발 위치를 기록
             dx, dy = self._window.start_offset
             self._ai_run_info.update(start_vertical_m=f"{PANEL_SIGN['x'] * dx:+.2f}",
                                      start_horizontal_m=f"{PANEL_SIGN['y'] * dy:+.2f}",
@@ -541,13 +535,13 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         driving = self._driver is not None and (self._driver.active or self._ai_pending)
         if preparing or driving:
             if preparing:
-                self._ai_task.cancel()  # otherwise it would still hand the plan to the driver afterwards
+                self._ai_task.cancel()  # 취소하지 않으면 나중에라도 plan 결과를 driver에 넘김
             self._end_ai("사용자가 멈춤", ok=None, stop_timeline=False)
         if not timeline.is_stopped():
-            timeline.stop()  # Stop puts the forklift and pallet back (also after a finished run, left paused)
+            timeline.stop()  # Stop이 지게차와 파렛트를 되돌림 (끝나서 일시 정지된 운전 후에도)
 
     def _toggle_ai_pause(self):
-        """While the AI drives, the start button pauses / resumes the simulation (the AI waits with it)."""
+        """AI 운전 중 시작 버튼은 시뮬레이션을 일시 정지 / 재개한다(AI도 함께 대기)."""
         timeline = omni.timeline.get_timeline_interface()
         if timeline.is_playing():
             timeline.pause()
@@ -563,15 +557,15 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         if self._window:
             self._window.set_ai(False, text, ok=ok)
         if stop_timeline:
-            omni.timeline.get_timeline_interface().pause()  # keep the final scene visible; Stop resets it
+            omni.timeline.get_timeline_interface().pause()  # 마지막 장면을 보여 줌; Stop하면 리셋
             self._ai_scene_held = True
             if self._window:
-                self._window.set_scene_stop(True)  # 'AI 멈춤' now stops (resets) the paused scene
+                self._window.set_scene_stop(True)  # 이제 'AI 멈춤'이 일시 정지된 장면을 정지(리셋)
 
-    # ---------------------------------------------------------------- AI run table
+    # ---------------------------------------------------------------- AI 운전 기록 표
 
     def _log_ai_run(self, result, text):
-        """One row in ai_runs.csv per AI drive (only the first end of a drive counts)."""
+        """AI 운전 1회당 ai_runs.csv에 한 행 (운전의 첫 종료만 기록)."""
         info, self._ai_run_info = self._ai_run_info, None
         if info is None:
             return
@@ -654,14 +648,14 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         os.startfile(os.path.normpath(str(DEMOS_DIR)))
 
     def _on_open_model_folder(self):
-        """The chosen AI model's folder (models\\<name>, or models for '기본') in Windows Explorer; with no model
-        yet the forklift_ai folder, where models\\ will appear."""
+        """선택한 AI 모델 폴더(models\\<name>, '기본'이면 models)를 Windows 탐색기로 연다.
+        모델이 아직 없으면 models\\가 생길 forklift_ai 폴더를 연다."""
         model = self._selected_model()
         folder = Path(model["paths"]).parent if model else (MODELS_DIR if MODELS_DIR.exists() else MODELS_DIR.parent)
         if folder.exists():
             os.startfile(os.path.normpath(str(folder)))
 
-    # ---------------------------------------------------------------- recording
+    # ---------------------------------------------------------------- 녹화
 
     def _finish(self, stop_timeline):
         self._pending_start = False
@@ -689,7 +683,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
         self._ai_scene_held = False
         if self._window:
             self._window.set_scene_stop(False)
-        self._reapply_frames = 3  # Lesson 1 puts the forklift back to the scene's start on Stop; re-apply the offset
+        self._reapply_frames = 3  # Stop 시 Lesson 1이 지게차를 장면 출발점으로 되돌리므로 오프셋을 다시 적용
 
     def _on_update(self, _event):
         timeline = omni.timeline.get_timeline_interface()
@@ -698,12 +692,12 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
             self._watch_t = now
             self._watch_files()
         self._show_keys(self._stage() if timeline.is_playing() else None)
-        if self._window:  # also follows a pause / play from Isaac Sim's own toolbar
+        if self._window:  # Isaac Sim 툴바의 일시 정지 / 재생도 반영
             driving = self._driver is not None and self._driver.active
             self._window.set_ai_pause_button(driving, paused=driving and not timeline.is_playing())
         if not timeline.is_playing():
             if self._driver is not None and self._driver.active and any(self._driver.keys.values()):
-                # Lesson 1 moves the forklift every app frame, paused or not: let go of every key and stand still
+                # Lesson 1은 일시 정지 중에도 매 앱 프레임 지게차를 움직임: 키를 모두 떼고 정지
                 self._driver.keys = {k: False for k in self._driver.keys}
                 fon._current_speed_mps = 0.0
                 fon._current_turn_rate_deg_per_sec = 0.0
@@ -731,7 +725,7 @@ class IsaacsimEduForkliftAIExtension(omni.ext.IExt):
                 return
             try:
                 self._recorder.start(stage)
-            except Exception as e:  # noqa: BLE001 - show it instead of failing silently
+            except Exception as e:  # noqa: BLE001 - 조용히 실패하지 않고 표시
                 carb.log_error(f"{LOG} could not start recording: {e}")
                 self._window.set_recording(False)
                 self._window.set_last(f"녹화를 시작하지 못했습니다: {e}", ok=False)

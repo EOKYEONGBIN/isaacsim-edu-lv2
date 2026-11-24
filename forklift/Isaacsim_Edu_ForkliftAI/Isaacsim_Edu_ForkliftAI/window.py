@@ -1,4 +1,4 @@
-"""Panel: record demonstrations, see how many are collected."""
+"""패널: 시연을 녹화하고 모인 데이터를 확인합니다."""
 
 import asyncio
 import random
@@ -25,14 +25,14 @@ COLOR_SECONDARY_HOVER = _rgb("40403A")
 COLOR_DISABLED = _rgb("2B2B27")
 COLOR_OK = _rgb("5BBF76")
 COLOR_WARN = _rgb("E08A2E")
-COLOR_GO = _rgb("76B343")  # same green as Lesson 1's 시작 (Play) button
+COLOR_GO = _rgb("76B343")  # Lesson 1의 시작(Play) 버튼과 같은 초록
 COLOR_GO_HOVER = _rgb("8BC65C")
 COLOR_GO_TEXT = _rgb("14150F")
 COLOR_STOP = _rgb("C8473F")
 COLOR_STOP_HOVER = _rgb("B03C35")
-COLOR_RANDOM = _rgb("5DADE2")  # '랜덤' toggle and its note
-COLOR_WIDE = _rgb("C39BD3")  # '확장' toggle and its note
-COLOR_FREE = _rgb("F0B27A")  # '위치 자유' toggle and its note (trial feature)
+COLOR_RANDOM = _rgb("5DADE2")  # '랜덤' 토글과 설명
+COLOR_WIDE = _rgb("C39BD3")  # '확장' 토글과 설명
+COLOR_FREE = _rgb("F0B27A")  # '위치 자유' 토글과 설명 (시험 기능)
 COLOR_PAUSE = _rgb("E0A82E")
 COLOR_PAUSE_HOVER = _rgb("EBBA52")
 COLOR_KEY = _rgb("343430")
@@ -48,33 +48,31 @@ def _button_style(bg=COLOR_SECONDARY, hover=COLOR_SECONDARY_HOVER, text=COLOR_TE
     }
 
 
-# Tables: (header, width; 0 = takes the remaining width). Five rows show, the rest scroll.
+# 표: (헤더, 너비; 0 = 남은 너비). 5줄까지 보이고 나머지는 스크롤.
 DEMO_COLUMNS = (("#", 24), ("녹화 시각", 0), ("세로", 42), ("가로", 42), ("회전", 40), ("시간", 36), ("이미지", 40), ("결과", 34))
 AI_RUN_COLUMNS = (("#", 20), ("세로", 36), ("가로", 36), ("파렛트", 40), ("결과", 50), ("시간", 36), ("모델&경로", 0), ("YOLO", 54))
 DEMO_ROWS_VISIBLE = 5
 DEMO_ROW_H = 22
 SCROLLBAR_W = 8
 
-# Key display (arrow keys + the two lift keys): key size and the lift keys' width
+# 키 표시 (방향키 + 리프트 키 2개): 키 크기와 리프트 키 너비
 KEY_SIZE = (36, 26)
 LIFT_KEY_W = 80
 
 
-# Forklift start offset from the scene's own start pose [m], as shown on the panel (sliders; numbers can be
-# typed too). The forklift faces the scene's -X (toward the pallet and rack), so 세로 is the scene's X with
-# the sign flipped (+ = forward) and 가로 is the scene's Y.
+# 장면 기본 출발 자세에서의 지게차 출발 오프셋 [m] (패널 슬라이더, 숫자 입력 가능).
+# 지게차는 장면의 -X(파렛트·랙 쪽)를 보므로 세로 = 장면 X의 부호 반전(+ = 앞), 가로 = 장면 Y.
 START_OFFSET_RANGE_M = {"x": (-0.2, 1.5), "y": (-2.0, 2.0)}
-WIDE_Y_RANGE_M = (-5.0, 5.0)  # '확장' toggle: the wider 가로 range (beyond where the demonstrations started)
-START_YAW_RANGE_DEG = (-180.0, 180.0)  # 회전 from the scene's start heading; + turns left (counter-clockwise from above)
-# The pallet can be moved straight back (away from the forklift, toward the rack) by up to this much -- never
-# toward the forklift, it could end up inside it. The AI drives on up to 1 m past the person's route to get the
-# forks all the way in, and the rack is 1 m behind the pallet.
+WIDE_Y_RANGE_M = (-5.0, 5.0)  # '확장' 토글: 더 넓은 가로 범위 (시연 출발 범위 밖)
+START_YAW_RANGE_DEG = (-180.0, 180.0)  # 장면 기본 방향 기준 회전; + = 왼쪽 (위에서 볼 때 반시계)
+# 파렛트는 뒤로(지게차 반대쪽, 랙 쪽)만 이만큼까지 옮김. 앞으로 옮기면 지게차와 겹칠 수 있음.
+# AI는 포크를 끝까지 넣으려고 사람 경로보다 최대 1 m 더 가고, 랙은 파렛트 1 m 뒤에 있음.
 PALLET_BACK_RANGE_M = (0.0, 0.5)
-PANEL_SIGN = {"x": -1.0, "y": 1.0}  # panel value * sign = offset along the scene axis
+PANEL_SIGN = {"x": -1.0, "y": 1.0}  # 패널 값 * 부호 = 장면 축 방향 오프셋
 
 FOLDER_ICON = carb.tokens.get_tokens_interface().resolve("${glyphs}/folder.svg")
 
-# Explanations shown as tooltips (hover) instead of notes in the panel
+# 패널 설명문 대신 툴팁(마우스 오버)으로 보여 주는 설명
 TIP_RECORD = ("녹화를 시작하고 키보드로 운전하세요: 파렛트 구멍에 포크 넣기 → Lift Up → 2층 선반에 내려놓기 → 포크 빼기 → "
               "'녹화 끝내기'. 출발 위치를 바꿔 가며 녹화하고, 실패한 시연은 '마지막 녹화 지우기'로 지우세요.")
 TIP_START = ("장면의 기본 출발 위치·방향에서 얼마나 옮기고 돌릴지입니다 (0 = 기본 위치, 회전 + = 왼쪽으로). "
@@ -101,10 +99,9 @@ TIP_RUNS = ("파렛트 칸은 파렛트를 뒤로 옮긴 거리, 모델&경로 �
 
 
 def _tooltip_fn(text):
-    """A tooltip on its own dark background (for set_tooltip_fn). A plain `tooltip` string sits on
-    Kit's pale yellow tooltip window in the panel's light text colour, so it looked like an empty box (the same
-    fix as isaacsim.robot_setup.gain_tuner.ui's build_wrapped_tooltip). Long text wraps at TOOLTIP_WRAP_W:
-    word_wrap needs an explicit width to wrap against."""
+    """어두운 배경을 직접 그린 툴팁 (`set_tooltip_fn`용). 일반 `tooltip` 문자열은 Kit의 연노랑 툴팁 창에
+    패널의 밝은 글자색으로 표시돼 빈 상자처럼 보임 (`isaacsim.robot_setup.gain_tuner.ui`의
+    `build_wrapped_tooltip`과 같은 해결책). `word_wrap`은 너비가 정해져야 줄바꿈하므로 긴 글은 `TOOLTIP_WRAP_W`에서 줄바꿈."""
     wrap = max(len(line) for line in text.splitlines()) > TOOLTIP_WRAP_CHARS
 
     def build():
@@ -123,7 +120,7 @@ def _tooltip_fn(text):
 
 
 def _tip(widget, text):
-    """Give `widget` a readable tooltip (see _tooltip_fn) and return it, for use inline where it is built."""
+    """`widget`에 읽기 쉬운 툴팁(`_tooltip_fn`)을 달고 그대로 반환. 위젯을 만드는 자리에서 바로 씀."""
     widget.set_tooltip_fn(_tooltip_fn(text))
     return widget
 
@@ -133,13 +130,13 @@ TOOLTIP_WRAP_W = 380
 
 
 def _row_style(margin_height):
-    """A button row with `margin_height` (on the row and, inherited, its buttons) instead of the panel's 4:
-    the gaps above / below it shrink by 2 * (4 - margin_height)."""
+    """패널 기본값 4 대신 `margin_height`를 쓰는 버튼 줄 (버튼에도 상속).
+    위아래 간격이 2 * (4 - margin_height)만큼 줄어듦."""
     return {"margin_height": margin_height}
 
 
 def _row_height(margin_height):
-    """The row height that keeps its buttons 22 px tall (as with the panel's usual margins)."""
+    """버튼 높이를 22 px로 유지하는 줄 높이 (패널 기본 여백일 때와 같게)."""
     return 22 + 4 * margin_height
 
 
@@ -153,26 +150,26 @@ class ForkliftAIWindow(ui.Window):
         self._yaw = ui.SimpleFloatModel(0.0)  # 회전 [deg]
         for m in (*self._offset.values(), self._yaw):
             m.add_value_changed_fn(lambda _m: self._cb.get("start_changed", lambda: None)())
-        self._random = ui.SimpleBoolModel(False)  # '랜덤': each recording / AI drive starts somewhere random
-        self._wide = ui.SimpleBoolModel(False)  # '확장': 가로 range WIDE_Y_RANGE_M
+        self._random = ui.SimpleBoolModel(False)  # '랜덤': 녹화·AI 운전마다 무작위 위치에서 출발
+        self._wide = ui.SimpleBoolModel(False)  # '확장': 가로 범위 `WIDE_Y_RANGE_M`
         self._wide.add_value_changed_fn(lambda _m: self._on_wide_changed())
-        self._free = ui.SimpleBoolModel(False)  # '위치 자유': recordings / AI drives start where the forklift was put
+        self._free = ui.SimpleBoolModel(False)  # '위치 자유': 녹화·AI 운전이 지게차를 옮겨 둔 자리에서 출발
         self._free.add_value_changed_fn(lambda m: self._cb.get("free_changed", lambda _on: None)(m.get_value_as_bool()))
         self._summary_text = self._model_text = self._eyes_text = "-"
-        # '랜덤' and '위치 자유' exclude each other: turning one on turns the other off
+        # '랜덤'과 '위치 자유'는 동시에 켤 수 없음: 하나를 켜면 다른 하나는 꺼짐
         self._random.add_value_changed_fn(lambda m: self._free.set_value(False) if m.get_value_as_bool() else None)
         self._free.add_value_changed_fn(lambda m: self._random.set_value(False) if m.get_value_as_bool() else None)
         self._sliders = {}
-        self._pallet_back = ui.SimpleFloatModel(0.0)  # how far back the pallet is moved [m]
+        self._pallet_back = ui.SimpleFloatModel(0.0)  # 파렛트를 뒤로 옮긴 거리 [m]
         self._pallet_back.add_value_changed_fn(lambda _m: self._cb.get("start_changed", lambda: None)())
-        self._eyes = ui.SimpleBoolModel(True)  # AI 운전 옵션 'YOLO로 파렛트 거리 재기' (off: lift where the route ends)
-        self._reposition = ui.SimpleBoolModel(False)  # '자리 고쳐 잡기': no route -> a short move, then plan again
-        self._ai_models = []  # [(name, label)] of the AI models to choose from ('AI 모델')
+        self._eyes = ui.SimpleBoolModel(True)  # AI 운전 옵션 'YOLO로 파렛트 거리 재기' (끄면 경로 끝에서 들어 올림)
+        self._reposition = ui.SimpleBoolModel(False)  # '자리 고쳐 잡기': 경로가 없으면 조금 움직인 뒤 다시 계획
+        self._ai_models = []  # 고를 수 있는 'AI 모델'의 [(name, label)]
         self._ai_model_name = None
         self._model_frame = None
         self._labels = {}
         self._buttons = {}
-        self._keys = {}  # driving key name -> (rectangle, label) of the key display
+        self._keys = {}  # 운전 키 이름 -> 키 표시의 (rectangle, label)
         self._key_state = {}
         self._demo_rows = None
         self._demos = ([], None)
@@ -181,12 +178,12 @@ class ForkliftAIWindow(ui.Window):
         self._clear_armed = False
         self._ai_ready = False
         self._driving = False
-        self._pause_state = "idle"  # start button: idle ('AI 운전 시작') / driving ('AI 일시 정지') / paused
+        self._pause_state = "idle"  # 시작 버튼 상태: idle ('AI 운전 시작') / driving ('AI 일시 정지') / paused
         self.frame.set_build_fn(self._build)
 
     def _build_model_row(self):
-        """'AI 모델': which learned paths (+ the YOLO model paired with them) the AI drives with, and a folder button
-        that opens the chosen model's folder. With no model yet the list is there but off."""
+        """'AI 모델' 줄: AI가 쓸 학습 경로(+ 짝이 되는 YOLO 모델) 선택과 그 폴더를 여는 버튼.
+        모델이 아직 없으면 목록은 보이지만 비활성."""
         with ui.HStack(height=22, spacing=6):
             _tip(ui.Label("AI 모델", width=70, style={"color": COLOR_DIM, "font_size": 12}), TIP_MODEL)
             if self._ai_models:
@@ -200,7 +197,7 @@ class ForkliftAIWindow(ui.Window):
                            style=_button_style()), "고른 AI 모델의 폴더를 탐색기로 엽니다")
 
     def _toggle(self, model, text, tip):
-        """An ON / OFF switch (button) with its label; hovering either shows `tip`."""
+        """라벨이 붙은 ON / OFF 스위치(버튼). 둘 중 어디에 마우스를 올려도 `tip`이 보임."""
         def paint(button):
             on = model.get_value_as_bool()
             button.text = "ON" if on else "OFF"
@@ -220,7 +217,7 @@ class ForkliftAIWindow(ui.Window):
             self._cb.get("model_changed", lambda: None)()
 
     def set_ai_models(self, items, default_name=None):
-        """items: [(name, label)]. The chosen model stays chosen while it exists; otherwise `default_name`."""
+        """items: [(name, label)]. 고른 모델이 남아 있으면 유지, 없으면 `default_name`."""
         self._ai_models = list(items)
         names = [n for n, _ in self._ai_models]
         if self._ai_model_name not in names:
@@ -236,9 +233,9 @@ class ForkliftAIWindow(ui.Window):
         ui.Label(text, height=0, word_wrap=True, style={"color": COLOR_DIM, "font_size": 12})
 
     def _build(self):
-        self._pause_state = "idle"  # the start button is (re)built as 'AI 운전 시작'
+        self._pause_state = "idle"  # 시작 버튼은 'AI 운전 시작'으로 다시 만들어짐
         with self.frame:
-            # the panel is taller than its dock slot: scroll it
+            # 패널이 도킹 영역보다 길어서 스크롤
             with ui.ScrollingFrame(
                 horizontal_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_OFF,
                 vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_AS_NEEDED,
@@ -248,7 +245,7 @@ class ForkliftAIWindow(ui.Window):
                     self._note("ⓘ 항목에 마우스를 올리면 설명이 보입니다.")
                     with ui.ZStack(height=0):
                         ui.Rectangle(style={"background_color": COLOR_CARD, "border_radius": 8})
-                        # half the usual gaps inside this card (margin 3 on every element + spacing 2), the same 12 px edge
+                        # 이 카드 안은 간격을 절반으로 (모든 요소 margin 3 + spacing 2), 가장자리는 똑같이 12 px
                         with ui.VStack(height=0, style={"margin": 0}):
                             ui.Spacer(height=6)
                             with ui.HStack(height=0, style={"margin": 0}):
@@ -304,10 +301,10 @@ class ForkliftAIWindow(ui.Window):
                     ui.Line(height=1, style={"color": COLOR_BORDER})
                     self._labels["summary"] = ui.Label(self._summary_text, height=0, word_wrap=True, style={"font_size": 13})
                     self._build_demo_table()
-                    self._labels["last"] = ui.Label("", height=0, word_wrap=True, visible=False,  # shown with a message
+                    self._labels["last"] = ui.Label("", height=0, word_wrap=True, visible=False,  # 메시지가 있을 때만 표시
                                                     style={"font_size": 12, "color": COLOR_DIM})
-                    # from here to 'AI 운전': half the panel's usual gaps (button rows with less margin, see _row_style)
-                    ui.Spacer(height=1, style={"margin": 0})  # a Spacer with the panel's margin is at least 8 px
+                    # 여기부터 'AI 운전'까지 간격 절반 (버튼 줄 여백 축소, `_row_style` 참고)
+                    ui.Spacer(height=1, style={"margin": 0})  # 패널 margin이 적용된 Spacer는 최소 8 px
                     with ui.HStack(height=_row_height(3), spacing=6, style=_row_style(3)):
                         self._buttons["discard"] = ui.Button("마지막 녹화 지우기", clicked_fn=self._cb["discard"], style=_button_style())
                         ui.Button("데이터 폴더 열기", clicked_fn=self._cb["open_folder"], style=_button_style())
@@ -326,7 +323,7 @@ class ForkliftAIWindow(ui.Window):
                             self._toggle(self._eyes, "YOLO로 파렛트 거리 재기", TIP_EYES)
                             self._toggle(self._reposition, "자리 고쳐 잡기", TIP_REPOSITION)
                     self._model_frame = ui.Frame(height=0, build_fn=self._build_model_row)
-                    # start buttons .. the note under the key display: half the usual gaps
+                    # 시작 버튼부터 키 표시 아래 안내까지 간격 절반
                     ui.Spacer(height=4, style={"margin": 0})
                     with ui.HStack(height=_row_height(0), spacing=6, style=_row_style(0)):
                         self._buttons["ai_start"] = _tip(ui.Button(
@@ -336,14 +333,14 @@ class ForkliftAIWindow(ui.Window):
                             "■ AI 멈춤", clicked_fn=self._cb["ai_stop"], enabled=False,
                             style=_button_style(COLOR_STOP, COLOR_STOP_HOVER))
                     self._build_key_display()
-                    self._labels["ai"] = ui.Label("", height=0, word_wrap=True, visible=False,  # shown with a message
+                    self._labels["ai"] = ui.Label("", height=0, word_wrap=True, visible=False,  # 메시지가 있을 때만 표시
                                                   style={"font_size": 13})
                     ui.Spacer(height=4)
                     _tip(ui.Label("AI 운전 기록", height=0, style={"font_size": 14, "color": COLOR_TEXT}), TIP_RUNS)
                     ui.Line(height=1, style={"color": COLOR_BORDER})
                     self._labels["runs"] = ui.Label("-", height=0, word_wrap=True, style={"font_size": 13})
                     self._run_row, self._run_rows = self._build_table(AI_RUN_COLUMNS, margin_height=3)
-                    with ui.HStack(height=_row_height(0), spacing=6, style=_row_style(0)):  # half the usual gaps
+                    with ui.HStack(height=_row_height(0), spacing=6, style=_row_style(0)):  # 간격 절반
                         self._buttons["run_discard"] = ui.Button("마지막 기록 지우기", clicked_fn=self._cb["run_discard"],
                                                                  style=_button_style())
                         self._buttons["run_clear"] = ui.Button("전체 지우기", clicked_fn=self._on_clear_clicked,
@@ -355,11 +352,9 @@ class ForkliftAIWindow(ui.Window):
         self._demo_row, self._demo_rows = self._build_table(DEMO_COLUMNS)
 
     def _build_table(self, columns, margin_height=None):
-        """A card with a header row and a scrolling body (DEMO_ROWS_VISIBLE rows show); `margin_height` sets
-        the card's own (and its background's) top / bottom margin instead of the panel's 4.
-        Returns (row(cells, colors=None, tooltips=None), body container).
-        (A margin_height inherited from above overrides a widget's own 'margin', so the card's insides set
-        both.)"""
+        """헤더 줄과 스크롤 본문(`DEMO_ROWS_VISIBLE`줄 표시)이 있는 카드. `margin_height`는 패널 기본값 4 대신
+        카드(와 배경)의 위아래 여백. (row(cells, colors=None, tooltips=None), 본문 컨테이너)를 반환.
+        (상속된 margin_height가 위젯 자체 'margin'보다 우선하므로 카드 내부는 둘 다 지정.)"""
         def row(cells, colors=None, tooltips=None, header=False):
             with ui.HStack(height=DEMO_ROW_H, spacing=2, style={"margin": 0, "margin_height": 0}):
                 for i, ((_, width), text) in enumerate(zip(columns, cells)):
@@ -397,12 +392,12 @@ class ForkliftAIWindow(ui.Window):
         number_of = {name: i for i, name in enumerate(demo_names, 1)}
         result_color = {"성공": COLOR_OK, "중단": COLOR_DIM}
         with self._run_rows:
-            for number, r in reversed(list(enumerate(runs, 1))):  # newest first
+            for number, r in reversed(list(enumerate(runs, 1))):  # 최신순
                 route = r.get("route") or ""
                 base = route.replace(" (변형)", "")
                 route_text = (f"#{number_of[base]}" if base in number_of else (base[-6:] if base else "-")) + \
                     (" 변형" if route.endswith("(변형)") else "")
-                model = r.get("model") or ""  # empty in rows saved before the model was logged
+                model = r.get("model") or ""  # 모델을 기록하기 전에 저장된 줄은 빈 값
                 route_text = f"{model} · {route_text}" if model else route_text
                 route_tip = f"모델: {model or '기록 없음'}\n경로: {route or '없음'}"
                 secs = r.get("seconds")
@@ -411,7 +406,7 @@ class ForkliftAIWindow(ui.Window):
                 except ValueError:
                     secs = "-"
                 raw = r.get("eyes") or "-"
-                eyes = {"YOLO": "ON", "없음": "OFF"}.get(raw, raw)  # 'YOLO로 파렛트 거리 재기' on / off
+                eyes = {"YOLO": "ON", "없음": "OFF"}.get(raw, raw)  # 'YOLO로 파렛트 거리 재기' 켬 / 끔
                 try:
                     if raw == "YOLO" and r.get("seat_true_m") and r.get("seat_used_m"):
                         eyes = f"ON ±{abs(float(r['seat_used_m']) - float(r['seat_true_m'])) * 100:.0f}"
@@ -425,7 +420,7 @@ class ForkliftAIWindow(ui.Window):
                     tooltips=[r.get("when") or None] + [None] * 3 + [r.get("detail") or None] + [None, route_tip, None])
 
     def _on_clear_clicked(self):
-        """'전체 지우기' asks once more before deleting every AI run record."""
+        """'전체 지우기': AI 운전 기록을 모두 지우기 전에 한 번 더 확인."""
         button = self._buttons.get("run_clear")
         if not self._clear_armed:
             self._clear_armed = True
@@ -452,7 +447,7 @@ class ForkliftAIWindow(ui.Window):
         with self._demo_rows:
             if not demos:
                 ui.Label("아직 녹화한 시연이 없습니다.", height=DEMO_ROW_H, style={"font_size": 12, "color": COLOR_DIM})
-            for number, d in reversed(list(enumerate(demos, 1))):  # newest first
+            for number, d in reversed(list(enumerate(demos, 1))):  # 최신순
                 stamp = d["name"].replace("demo_", "")  # YYYYMMDD_HHMMSS
                 when = f"{stamp[4:6]}-{stamp[6:8]} {stamp[9:11]}:{stamp[11:13]}" if len(stamp) >= 13 else stamp
                 x, y = d["start"]
@@ -467,7 +462,7 @@ class ForkliftAIWindow(ui.Window):
                                colors=[None] * 7 + [COLOR_OK if d["success"] else COLOR_WARN])
 
     def _build_key_display(self):
-        """Which driving keys are held right now (the AI's or the person's): arrow keys + Lift Up / Lift Down."""
+        """지금 눌린 운전 키 표시 (AI 또는 사람): 방향키 + Lift Up / Lift Down."""
         def key(name, text, width=KEY_SIZE[0]):
             with ui.ZStack(width=width, height=KEY_SIZE[1]):
                 rect = ui.Rectangle(style={"background_color": COLOR_KEY, "border_radius": 5,
@@ -475,8 +470,8 @@ class ForkliftAIWindow(ui.Window):
                 label = ui.Label(text, alignment=ui.Alignment.CENTER, style={"font_size": 13, "color": COLOR_DIM})
             self._keys[name] = (rect, label)
 
-        # the card's top / bottom margin 3 instead of the panel's 4 (half the gaps around it); its insides set
-        # margin_height too, as an inherited one overrides their own 'margin'
+        # 카드 위아래 여백은 패널 기본 4 대신 3 (주변 간격 절반). 상속된 margin_height가 'margin'보다
+        # 우선하므로 내부에도 margin_height를 지정
         with ui.ZStack(height=0, style={"margin_height": 3}):
             ui.Rectangle(style={"background_color": COLOR_CARD, "border_radius": 8})
             with ui.HStack(height=0, style={"margin": 0, "margin_height": 0}):
@@ -501,10 +496,10 @@ class ForkliftAIWindow(ui.Window):
                 ui.Spacer()
         self._key_state = {}
 
-    # ---------------------------------------------------------------- api
+    # ---------------------------------------------------------------- 외부에서 호출하는 API
 
     def _range(self, key):
-        """(lo, hi) of the panel's 세로 ("x") / 가로 ("y") value; '확장' widens 가로."""
+        """패널 세로("x") / 가로("y") 값의 (lo, hi). '확장'이면 가로가 넓어짐."""
         if key == "y" and self._wide.get_value_as_bool():
             return WIDE_Y_RANGE_M
         return START_OFFSET_RANGE_M[key]
@@ -515,12 +510,12 @@ class ForkliftAIWindow(ui.Window):
         if slider is not None:
             slider.min, slider.max = lo, hi
         v = self._offset["y"].get_value_as_float()
-        if not lo <= v <= hi:  # turning '확장' off with the forklift out wide: bring it back into range
+        if not lo <= v <= hi:  # 넓은 위치에서 '확장'을 끄면 범위 안으로 되돌림
             self._offset["y"].set_value(min(hi, max(lo, v)))
 
     @property
     def free_start(self):
-        """'위치 자유' (trial): AI drives start from wherever the forklift stands now."""
+        """'위치 자유' (시험 기능): AI 운전이 지게차의 현재 자리에서 출발."""
         return self._free.get_value_as_bool()
 
     @property
@@ -528,8 +523,7 @@ class ForkliftAIWindow(ui.Window):
         return self._random.get_value_as_bool()
 
     def randomize_start(self, pallet=False, forklift=True):
-        """Pick a random start inside the current ranges (and, with `pallet`, a random pallet position) and
-        show it on the sliders."""
+        """현재 범위 안에서 무작위 출발점(`pallet`이면 파렛트 위치도)을 골라 슬라이더에 표시."""
         for k in (("y", "x") if forklift else ()):
             lo, hi = self._range(k)
             self._offset[k].set_value(round(random.uniform(lo, hi), 2))
@@ -540,7 +534,7 @@ class ForkliftAIWindow(ui.Window):
 
     @property
     def start_offset(self):
-        """(dx, dy) along the scene's axes."""
+        """장면 축 기준 (dx, dy)."""
         def axis(k):
             lo, hi = self._range(k)
             return PANEL_SIGN[k] * min(hi, max(lo, self._offset[k].get_value_as_float()))
@@ -548,12 +542,12 @@ class ForkliftAIWindow(ui.Window):
 
     @property
     def start_yaw(self):
-        """회전 [deg] from the scene's start heading (+ = left)."""
+        """장면 기본 방향 기준 회전 [deg] (+ = 왼쪽)."""
         lo, hi = START_YAW_RANGE_DEG
         return min(hi, max(lo, self._yaw.get_value_as_float()))
 
     def set_start_offset(self, x, y):
-        """Set the offset along the scene's axes (the panel shows it with its own signs)."""
+        """장면 축 기준 오프셋을 설정 (패널에는 패널 부호로 표시)."""
         self._offset["x"].set_value(PANEL_SIGN["x"] * float(x))
         self._offset["y"].set_value(PANEL_SIGN["y"] * float(y))
 
@@ -570,7 +564,7 @@ class ForkliftAIWindow(ui.Window):
 
     @property
     def eyes_mode(self):
-        """"yolo" (AI 운전 옵션 'YOLO로 파렛트 거리 재기' on) or "none"."""
+        """"yolo" (AI 운전 옵션 'YOLO로 파렛트 거리 재기' 켬) 또는 "none"."""
         return "yolo" if self._eyes.get_value_as_bool() else "none"
 
     def set_eyes(self, on):
@@ -605,7 +599,7 @@ class ForkliftAIWindow(ui.Window):
         self._driving = driving
         if not self._labels:
             return
-        # while the AI drives, the start button is its pause / resume button
+        # AI 운전 중에는 시작 버튼이 일시 정지 / 다시 시작 버튼
         self._buttons["ai_start"].enabled = self._pause_state != "idle" or (not driving and self._ai_ready)
         self._buttons["ai_stop"].enabled = driving
         self._buttons["start"].enabled = not driving
@@ -616,7 +610,7 @@ class ForkliftAIWindow(ui.Window):
             self._labels["ai"].style = {"font_size": 13, "color": color}
 
     def set_ai_pause_button(self, driving, paused):
-        """While the AI drives, the start button becomes 'AI 일시 정지' (or 'AI 다시 시작' while paused)."""
+        """AI 운전 중에는 시작 버튼을 'AI 일시 정지'(일시 정지 중에는 'AI 다시 시작')로 바꿈."""
         state = ("paused" if paused else "driving") if driving else "idle"
         button = self._buttons.get("ai_start")
         if button is None or state == self._pause_state:
@@ -636,20 +630,20 @@ class ForkliftAIWindow(ui.Window):
             button.enabled = True
 
     def set_ai_ready(self, ready):
-        """'AI 운전 시작' can only be pressed once there are learned routes."""
+        """학습된 경로가 있어야 'AI 운전 시작'을 누를 수 있음."""
         self._ai_ready = ready
         if "ai_start" in self._buttons:
             self._buttons["ai_start"].enabled = self._pause_state != "idle" or (ready and not self._driving)
 
     def set_scene_stop(self, enabled):
-        """After a finished AI run the scene stays paused; 'AI 멈춤' then stops (resets) it.
-        Until then '녹화 시작' stays off, like while the AI drives."""
+        """AI 운전이 끝나면 장면은 일시 정지 상태로 남고, 'AI 멈춤'으로 정지(리셋)함.
+        그때까지는 AI 운전 중처럼 '녹화 시작'이 꺼져 있음."""
         if "ai_stop" in self._buttons and not self._driving:
             self._buttons["ai_stop"].enabled = enabled
             self._buttons["start"].enabled = not enabled
 
     def set_keys(self, held):
-        """Light up the driving keys held right now ({key name: bool})."""
+        """지금 눌린 운전 키에 불을 켬 ({키 이름: bool})."""
         for name, (rect, label) in self._keys.items():
             on = bool(held.get(name))
             if self._key_state.get(name) == on:
@@ -660,14 +654,13 @@ class ForkliftAIWindow(ui.Window):
             label.style = {"font_size": 13, "color": COLOR_GO_TEXT if on else COLOR_DIM}
 
     def set_demos(self, demos, base):
-        """Fill the recorded-demonstration table (base: the scene's forklift start (x, y, yaw_deg), for the
-        세로 / 가로 / 회전 columns)."""
+        """시연 표를 채움 (base: 세로 / 가로 / 회전 칸 계산용 장면 기본 출발점 (x, y, yaw_deg))."""
         self._demos = (demos, base)
         self._fill_demo_rows()
-        self._fill_run_rows()  # route numbers refer to the demonstration table
+        self._fill_run_rows()  # 경로 번호는 시연 표의 번호
 
     def set_ai_runs(self, runs):
-        """Fill the AI run table (rows as saved in ai_runs.csv, oldest first)."""
+        """AI 운전 기록 표를 채움 (`ai_runs.csv`에 저장된 줄, 오래된 순)."""
         self._runs = (runs, [d["name"] for d in self._demos[0]])
         self._fill_run_rows()
 

@@ -11,14 +11,14 @@ import omni.ui as ui
 from .window import EduLv2Window, WINDOW_TITLE
 
 MENU_GROUP = "Azwell"
-LESSON1_MODULE_NAME = "Isaacsim_Edu_Lv2_Lesson1"  # 지게차 시뮬레이션 (copy of Lv1's Lesson 3)
-LESSON2_MODULE_NAME = "Isaacsim_Edu_ForkliftAI"  # 지게차 AI (runs on Lesson 1's forklift controls)
+LESSON1_MODULE_NAME = "Isaacsim_Edu_Lv2_Lesson1"  # 지게차 시뮬레이션 (Lv1 Lesson 3 복사본)
+LESSON2_MODULE_NAME = "Isaacsim_Edu_ForkliftAI"  # 지게차 AI (Lesson 1의 지게차 조작 기능 사용)
 ALL_LESSON_MODULES = [
     LESSON1_MODULE_NAME,
     LESSON2_MODULE_NAME,
 ]
-# Lv1's lessons are turned off too when a Lv2 lesson starts (only one lesson scene open at a time; Lv1's
-# Lesson 3 registers the same forklift node types as Lesson 1 here).
+# Lv2 레슨을 시작하면 Lv1 레슨도 끈다. 레슨 씬은 한 번에 하나만 열고,
+# Lv1 Lesson 3은 여기 Lesson 1과 같은 지게차 노드 타입을 등록하기 때문.
 LV1_LESSON_MODULES = [
     "Isaacsim_Edu_Lv1_Lesson1",
     "Isaacsim_Edu_Lv1_Lesson2",
@@ -26,45 +26,28 @@ LV1_LESSON_MODULES = [
     "Isaacsim_Edu_Lv1_Lesson4",
     "Isaacsim_Edu_Lv1_Lesson5",
 ]
-# With the Lv1 launcher on as well, this window joins its column as a tab (see _dock_with_lv1).
+# Lv1 런처도 켜져 있으면 이 창은 그 열에 탭으로 붙는다 (_dock_with_lv1 참고).
 LV1_LAUNCHER_MODULE = "Isaacsim_Edu_Lv1"
 LV1_WINDOW_TITLE = "AZ Edu Lv1"
 
-# Persistent (survives across Isaac Sim restarts) setting for whether the
-# panel should be open. Defaults to visible so trainers don't have to
-# reopen it via the Azwell menu every launch; if a user explicitly closes
-# it, that choice is remembered and it stays closed on the next launch too.
+# 패널 표시 여부 (재시작 후에도 유지). 기본값은 표시라 매번 Azwell 메뉴로 열 필요가 없고,
+# 사용자가 닫으면 다음 실행에도 닫힌 채로 둔다.
 SETTING_WINDOW_VISIBLE = "/persistent/exts/Isaacsim_Edu_Lv2/window_visible"
 
-# Which lesson module is currently active, written every time _activate_lesson
-# runs (and mirrored by each lesson's own on_startup -- see their extension.py
-# files) so a crashed-and-relaunched Isaac Sim can pick back up in the same
-# lesson. NOT the same thing as Kit's own "remember enabled extensions"
-# mechanism: that list (visible in user.config.json under exts/enabled) is
-# only updated when an extension is toggled through the Extensions *window*
-# checkbox -- confirmed live that calling set_extension_enabled_immediate()
-# from code, which is how every lesson button here works, never touches it.
-# A plain /persistent/ setting, by contrast, is the same proven mechanism
-# already used for SETTING_WINDOW_VISIBLE above, written synchronously the
-# moment a lesson activates rather than deferred to a clean app exit.
+# 현재 활성 레슨. _activate_lesson과 각 레슨의 on_startup에서 기록해, 비정상 종료 후 재실행하면 같은 레슨으로 복귀한다.
+# Kit의 "활성 익스텐션 기억"(`user.config.json`의 exts/enabled)과는 별개다. 그 목록은 Extensions 창 체크박스로
+# 토글할 때만 갱신되고, 레슨 버튼이 쓰는 set_extension_enabled_immediate() 호출로는 바뀌지 않는다(실측 확인).
+# /persistent/ 설정은 레슨 활성화 시점에 바로 기록되므로 정상 종료가 아니어도 남는다.
 SETTING_ACTIVE_LESSON = "/persistent/exts/Isaacsim_Edu_Lv2/active_lesson"
 
 
-# ui.Window has no built-in "dock a new full-height column beside an
-# existing stack of windows" call: dock_in_window/deferred_dock_in only
-# split the target window's own immediate slot, so docking beside "Stage"
-# alone (confirmed live) leaves Property spanning underneath both the old
-# and new columns instead of keeping its own width -- Stage and Property
-# each need to keep their existing top/bottom arrangement untouched, with
-# the new window added as a sibling of that whole arrangement, one level up.
-# ui.Workspace.dump_workspace()/restore_workspace() (undocumented beyond
-# their docstrings) is the only way to reach that: it round-trips the whole
-# dock tree as plain dicts, which can be surgically edited before writing
-# it back. Confirmed live this is easy to get wrong -- a hand-written leaf
-# entry missing fields real dump_workspace() output always has (dock_id,
-# width/height, position_x/y, visible) left Stage AND Property undocked
-# entirely. The functions below only ever move dicts dump_workspace() itself
-# produced, never author new leaf entries from scratch.
+# ui.Window에는 "기존 창 묶음 옆에 전체 높이 열을 새로 도킹"하는 API가 없다. dock_in_window/deferred_dock_in은
+# 대상 창의 슬롯만 분할하므로, "Stage" 옆에 도킹하면 Property가 기존·새 열 아래에 걸쳐 버린다(실측 확인).
+# Stage/Property의 위아래 배치는 그대로 두고, 새 창은 그 묶음 전체의 형제로 한 단계 위에 넣어야 한다.
+# 이를 위해 ui.Workspace.dump_workspace()/restore_workspace()(docstring 외 문서 없음)로 도킹 트리를 dict로 받아
+# 수정한 뒤 다시 적용한다. 주의: 직접 만든 leaf 항목에 실제 dump에 있는 필드(dock_id, width/height,
+# position_x/y, visible)가 빠지면 Stage와 Property가 통째로 도킹 해제됐다(실측 확인).
+# 그래서 아래 함수들은 dump_workspace()가 만든 dict를 옮기기만 하고, leaf를 새로 만들지 않는다.
 def _find_ancestor_chain(node, title, chain):
     chain = chain + [node]
     if node.get("title") == title:
@@ -77,14 +60,10 @@ def _find_ancestor_chain(node, title, chain):
 
 
 def _first_leaf_width(node):
-    """Recursively find any leaf under `node` and return its "width", or
-    None. Used to size a freshly-split column to match its sibling rather
-    than whatever stale width the moved window last had -- restore_workspace
-    derives split proportions from each leaf's declared width, and a stale
-    one (e.g. from this same window's last, differently-sized position)
-    otherwise makes the split ratio drift wider on every reload (confirmed
-    live: repeated reloads without this grew the Lv1 launcher (this code was copied from it) from ~215 to ~546px
-    with no user action)."""
+    """`node` 아래 아무 leaf의 "width"를 반환 (없으면 None).
+    새로 분할한 열의 폭을 형제 열에 맞추는 데 쓴다. restore_workspace는 leaf의 width로 분할 비율을 정하므로,
+    이전 위치의 오래된 width가 남으면 리로드할 때마다 열이 넓어진다
+    (실측: 이 코드의 원본인 Lv1 런처가 조작 없이 ~215 -> ~546px)."""
     if "title" in node:
         return node.get("width")
     for child in node.get("children", []):
@@ -95,18 +74,11 @@ def _first_leaf_width(node):
 
 
 def _extract_group(dump, title):
-    """Find the leaf `title` anywhere in `dump` (a dump_workspace() list),
-    remove it, and return the list of leaf dicts to re-dock in its place.
-    If it shares a dock slot with sibling tabs, ALL of them are removed and
-    returned together, not just `title` alone -- confirmed live this matters
-    on a real app launch: a lesson's own window can tab-join this one (via
-    its own deferred_dock_in) while this one is still floating, before this
-    module's own code gets a chance to dock it anywhere. Extracting only the
-    single named leaf left that lesson tab behind, alone, in the vacated
-    slot -- a duplicate, orphaned column next to the real one. Floating
-    top-level entries (not real tab groups -- e.g. Isaac Sim's various
-    hidden utility windows, each its own independent list entry) are never
-    swept up this way. None if `title` isn't found at all."""
+    """`dump`(dump_workspace() 리스트)에서 leaf `title`을 찾아 제거하고, 다시 도킹할 leaf dict 목록을 반환.
+    같은 슬롯에 탭으로 묶인 형제가 있으면 모두 함께 꺼낸다. 실제 앱 실행 시 이 창이 아직 플로팅일 때
+    레슨 창이 deferred_dock_in으로 먼저 탭 결합할 수 있는데, `title`만 꺼내면 레슨 탭이 빈 슬롯에 홀로 남아
+    고아 열이 생겼다(실측 확인). 최상위 플로팅 항목(Isaac Sim의 숨은 유틸리티 창 등)은 묶지 않는다.
+    `title`이 없으면 None."""
     def _search(container):
         for i, item in enumerate(container):
             if item.get("title") == title:
@@ -129,16 +101,10 @@ def _extract_group(dump, title):
 
 
 def _has_common_dock_ancestor(*titles):
-    """True once all of `titles` are already docked together under some
-    shared node (deeper than the tree root) -- the same lookup
-    _dock_full_height_beside does internally, without moving anything.
-    Reported live: on a cold app boot (unlike a same-session extension
-    reload) Stage and Property can each already exist as windows
-    (ui.Workspace.get_window returns non-None) slightly before whatever
-    docks them together relative to each other has actually run, since each
-    core window's own extension does that on its own schedule -- polling
-    just for existence let _dock_beside_stage run too early and fall back
-    to the plainer, uglier split. This is the correct thing to poll for."""
+    """`titles`가 모두 트리 루트가 아닌 공통 노드 아래에 도킹돼 있으면 True.
+    _dock_full_height_beside와 같은 검사이며 아무것도 옮기지 않는다.
+    콜드 부팅 시(같은 세션 리로드와 달리) Stage/Property 창은 서로 도킹되기 전에 먼저 생길 수 있어,
+    존재 여부만 폴링하면 _dock_beside_stage가 너무 일찍 실행돼 단순 분할로 빠졌다. 그래서 이것을 폴링한다."""
     dump = ui.Workspace.dump_workspace()
     root = dump[0]
     chains = [_find_ancestor_chain(root, title, []) for title in titles]
@@ -150,17 +116,13 @@ def _has_common_dock_ancestor(*titles):
             common_depth = depth
         else:
             break
-    return common_depth > 0  # depth 0 would be the tree root itself
+    return common_depth > 0  # depth 0은 트리 루트
 
 
 def _dock_full_height_beside(new_window_title, *existing_titles):
-    """Dock the window titled `new_window_title` as a new column spanning
-    the full height of the smallest existing dock group that already
-    contains all of `existing_titles` (e.g. "Stage" and "Property"), leaving
-    that group's own internal arrangement untouched. Returns False (no
-    change made) if that group can't be found in the expected shape or the
-    new window doesn't exist yet, so the caller can fall back to a plainer,
-    always-safe docking call instead."""
+    """`new_window_title` 창을 `existing_titles`(예: "Stage", "Property")를 모두 포함하는 가장 작은 도킹 그룹 옆에
+    전체 높이 열로 도킹한다. 그룹 내부 배치는 그대로 둔다.
+    그룹이 예상 형태가 아니거나 새 창이 아직 없으면 아무것도 바꾸지 않고 False (호출 측이 단순 도킹으로 대체)."""
     dump = ui.Workspace.dump_workspace()
     root = dump[0]
 
@@ -175,7 +137,7 @@ def _dock_full_height_beside(new_window_title, *existing_titles):
             common, common_depth = nodes_at_depth[0], depth
         else:
             break
-    if common is None or common_depth == 0:  # depth 0 would be the tree root itself
+    if common is None or common_depth == 0:  # depth 0은 트리 루트
         return False
 
     parent = chains[0][common_depth - 1]
@@ -192,10 +154,8 @@ def _dock_full_height_beside(new_window_title, *existing_titles):
         for leaf in new_leaves:
             leaf["width"] = sibling_width
 
-    # dock_id on the two new nodes is unused by Kit here (it reassigns real
-    # ids on reconstruction regardless -- confirmed live) but every node in
-    # a real dump_workspace() has one, so this stays consistent with that
-    # shape rather than relying on it being optional.
+    # 새 노드 두 개의 dock_id는 Kit이 재구성 시 다시 매겨 실제로는 안 쓰인다(실측 확인).
+    # 실제 dump_workspace()의 모든 노드에 있는 필드라 형태를 맞추려고 넣는다.
     wrapper = {
         "dock_id": common.get("dock_id", 0) + 1,
         "position": common.get("position"),
@@ -210,16 +170,9 @@ def _dock_full_height_beside(new_window_title, *existing_titles):
 
 
 def _shrink_column_width(leaf_title, protected_sibling_title, factor):
-    """Shrink `leaf_title`'s whole dock column to `factor` of its current
-    width, handing the freed space to whatever lies OUTSIDE the two-way
-    split it shares with `protected_sibling_title` (which keeps its exact
-    current width). E.g. shrinking Stage's column while protecting AZ Edu
-    Lv2's hands the freed space to Viewport -- Viewport lives outside that
-    shared split entirely -- rather than growing AZ Edu Lv2 instead, which
-    is what naively resizing just the one column would otherwise do
-    (confirmed live: set_dock_id_width scales both sides of a split
-    proportionally, it doesn't just take space from one and leave the
-    other untouched)."""
+    """`leaf_title`의 열 전체를 현재 폭의 `factor` 배로 줄이고, 남는 공간은 `protected_sibling_title`과 함께 쓰는
+    2분할의 바깥쪽에 준다(형제 폭은 유지). 예: AZ Edu Lv2를 보호하며 Stage 열을 줄이면 Viewport가 넓어진다.
+    set_dock_id_width는 분할 양쪽을 비례로 조정하므로, 한 열만 리사이즈하면 형제 열이 커진다(실측 확인)."""
     leaf = ui.Workspace.get_window(leaf_title)
     sibling = ui.Workspace.get_window(protected_sibling_title)
     if leaf is None or sibling is None:
@@ -235,9 +188,8 @@ def _shrink_column_width(leaf_title, protected_sibling_title, factor):
 
 
 def _shrink_row_height(leaf_title, factor):
-    """Shrink `leaf_title`'s own dock row to `factor` of its current
-    height, handing the freed space to whatever it's split against (e.g.
-    Content's row shrinking hands space to Viewport above it)."""
+    """`leaf_title`의 행을 현재 높이의 `factor` 배로 줄이고, 남는 공간은 분할 상대에게 준다
+    (예: Content를 줄이면 위쪽 Viewport가 커짐)."""
     leaf = ui.Workspace.get_window(leaf_title)
     if leaf is None:
         return
@@ -246,11 +198,8 @@ def _shrink_row_height(leaf_title, factor):
 
 
 def _apply_size_preferences():
-    """Trainer-requested proportions layered on top of Isaac Sim's own
-    default layout: Stage/Property narrower and Viewport wider by the same
-    amount, Content shorter (Console/Robotics Examples share its tab so
-    this affects them equally too) and Viewport taller by the same
-    amount."""
+    """Isaac Sim 기본 레이아웃 위에 강사 요청 비율을 적용한다.
+    Stage/Property는 좁게, Content(Console/Robotics Examples와 같은 탭)는 낮게 하고 그만큼 Viewport를 키운다."""
     _shrink_column_width("Stage", WINDOW_TITLE, 0.5)
     _shrink_row_height("Content", 0.5)
 
@@ -278,17 +227,14 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
         self._dock_task = asyncio.ensure_future(self._dock_beside_stage())
         self._reclaim_task = asyncio.ensure_future(self._reclaim_stray_lesson_tabs())
 
-        # Resume whichever lesson was active last time, e.g. after a crash --
-        # only if it's still a real, known lesson module (a stale/edited-out
-        # value from an older version shouldn't error out).
+        # 마지막 활성 레슨으로 복귀(예: 비정상 종료 후). 이전 버전에서 남은 값처럼 모르는 모듈이면 무시.
         last_lesson = settings.get(SETTING_ACTIVE_LESSON)
         if last_lesson in ALL_LESSON_MODULES:
             self._activate_lesson(last_lesson)
 
     def on_shutdown(self):
-        # Set before touching self._window.visible below -- that assignment
-        # also fires _on_window_visibility_changed, and a shutdown-triggered
-        # hide must NOT overwrite the user's actual last-chosen preference.
+        # 아래 self._window.visible 변경 전에 설정. 그 대입이 _on_window_visibility_changed를 호출하는데,
+        # 종료로 인한 숨김이 사용자의 표시 설정을 덮어쓰면 안 된다.
         self._shutting_down = True
 
         if self._dock_task:
@@ -301,10 +247,8 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
             self._menu_helper.menu_shutdown()
             self._menu_helper = None
         if self._window:
-            # .destroy() alone only "removes callbacks and circular
-            # references" (per omni.ui's own docstring) -- it does not hide
-            # the window, so without this the old window stays visibly on
-            # screen as an inert orphan every time this extension reloads.
+            # .destroy()는 콜백/순환 참조만 정리하고 창을 숨기지 않는다(omni.ui docstring).
+            # 숨기지 않으면 리로드할 때마다 동작하지 않는 이전 창이 화면에 남는다.
             self._window.visible = False
             self._window.destroy()
             self._window = None
@@ -319,28 +263,13 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
         if omni.kit.app.get_app().get_extension_manager().is_extension_enabled(LV1_LAUNCHER_MODULE):
             if await self._dock_with_lv1():
                 return
-        # Reset to Isaac Sim's own bundled default layout first. Confirmed
-        # live: whatever Kit auto-restores a window layout from between
-        # launches (mechanism unclear -- not user.config.json, not
-        # omni.kit.quicklayout's own manual save file, and not any of this
-        # extension's own code) can leave Viewport, Content, and Console
-        # badly mis-sized -- e.g. Viewport squeezed to a few pixels tall --
-        # depending on how a previous session happened to be left. Loading
-        # the bundled default up front guarantees every trainee's launch
-        # starts from the same known-good baseline before this window adds
-        # its own column, rather than inheriting whatever a prior session
-        # (or this extension's own earlier testing) left behind. This
-        # doesn't touch "AZ Edu Lv2" or any lesson window's docked position
-        # -- the default layout doesn't know about them, so they're simply
-        # left wherever they already are (floating at this point) for the
-        # docking below to pick up. It DOES hide them, though (confirmed
-        # live): loading a layout that doesn't mention a window marks it
-        # invisible, same as `QuickLayout.load_file`'s own
-        # `keep_windows_open=False` default, and `dock_in_window` silently
-        # no-ops on an invisible window -- so without undoing that here,
-        # this window (and, transitively, any lesson tab riding along with
-        # it) would otherwise stay stuck floating and hidden forever no
-        # matter how many times the docking below retries.
+        # 먼저 Isaac Sim 기본 레이아웃으로 초기화한다. Kit이 실행 간 레이아웃을 자동 복원하는데
+        # (경로 불명: `user.config.json`도, omni.kit.quicklayout 저장 파일도, 이 익스텐션 코드도 아님),
+        # 이전 세션 상태에 따라 Viewport/Content/Console 크기가 크게 틀어질 수 있다(예: Viewport 높이 몇 px, 실측 확인).
+        # 기본 레이아웃을 먼저 불러 모든 교육생이 같은 상태에서 시작하게 한다.
+        # 기본 레이아웃은 "AZ Edu Lv2"와 레슨 창을 모르므로 위치는 그대로(이 시점엔 플로팅) 두지만 숨김 처리한다
+        # (실측 확인, `QuickLayout.load_file`의 `keep_windows_open=False` 기본값과 같음). `dock_in_window`는 숨겨진 창에서
+        # 아무 동작도 하지 않으므로, 다시 표시하지 않으면 이 창(과 함께 붙은 레슨 탭)이 계속 숨은 채 떠 있게 된다.
         registry = omni.kit.actions.core.get_action_registry()
         default_layout_action = registry.get_action("isaacsim.app.setup", "layout_default")
         if default_layout_action is not None:
@@ -351,12 +280,8 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
                 return
             self._window.visible = True
 
-        # Poll for Stage and Property to already be docked together, not
-        # just for each to exist -- see _has_common_dock_ancestor's own
-        # docstring for the cold-boot race this guards (confirmed live: a
-        # same-session extension reload never hits it, since Stage/Property
-        # are long since docked together by then, but a fresh app launch
-        # can have this run before they are).
+        # Stage/Property가 존재하는지가 아니라 서로 도킹됐는지를 폴링한다. 콜드 부팅 경합 대응
+        # (_has_common_dock_ancestor docstring 참고). 같은 세션 리로드에서는 발생하지 않는다(실측 확인).
         app = omni.kit.app.get_app()
         for _ in range(60):
             if self._window is None:
@@ -368,17 +293,9 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
             carb.log_warn("[Isaacsim_Edu_Lv2] Could not dock beside Stage -- target window never appeared")
             return
 
-        # restore_workspace can silently no-op on a window that was itself
-        # only just constructed this same tick -- confirmed live: it can
-        # report success immediately after this extension's own on_startup
-        # runs (the earliest _has_common_dock_ancestor can already be true),
-        # yet leave the window floating, undocked, with no further ticks
-        # ever fixing it on their own -- but the exact same call succeeds
-        # immediately once called again after any window has had a chance
-        # to actually render once. One settling frame before the first
-        # attempt, then checking the real result (not just the return
-        # value) and retrying a few times, turns that into a non-issue
-        # instead of permanently settling for the plainer split below.
+        # 같은 틱에 막 생성된 창에는 restore_workspace가 성공을 반환하고도 효과가 없을 수 있다(실측 확인:
+        # on_startup 직후 창이 플로팅으로 남고 저절로 고쳐지지 않음). 창이 한 번 렌더링된 뒤 다시 호출하면 바로 성공한다.
+        # 그래서 첫 시도 전에 한 프레임 쉬고, 반환값이 아닌 실제 도킹 여부를 확인하며 몇 번 재시도한다.
         await app.next_update_async()
         for _ in range(10):
             if self._window is None:
@@ -388,36 +305,22 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
                 break
             await app.next_update_async()
         else:
-            # Stage/Property aren't in the expected default arrangement (a
-            # simple two-way split sharing one ancestor) -- confirmed live
-            # this can otherwise leave the whole layout corrupted (windows
-            # undocked entirely), so fall back to the one safe, well-defined
-            # operation instead of guessing further: a plain split beside
-            # Stage only. Less pretty (Property ends up spanning under both
-            # columns instead of staying its own width) but never breaks.
+            # Stage/Property가 예상한 기본 배치(공통 조상을 둔 2분할)가 아니다. 더 시도하면 레이아웃 전체가
+            # 깨질 수 있으므로(실측 확인: 창이 모두 도킹 해제됨) 안전한 Stage 옆 단순 분할로 대체한다.
+            # Property가 두 열 아래에 걸쳐 보기엔 덜 좋지만 깨지지는 않는다.
             if self._window is not None:
                 self._window.dock_in_window("Stage", ui.DockPosition.RIGHT, 0.5)
 
-        # Same settling-frame issue as the docking above -- resizing a dock
-        # split immediately after it was just created can silently no-op.
+        # 위 도킹과 같은 이유: 방금 만든 분할을 바로 리사이즈하면 무시될 수 있다.
         await app.next_update_async()
         _apply_size_preferences()
 
     async def _reclaim_stray_lesson_tabs(self):
-        # A lesson's own deferred_dock_in("AZ Edu Lv2", ...) call can resolve
-        # while this window is mid-move (still floating, or freshly restored
-        # into its final spot) -- confirmed live this occasionally leaves
-        # the lesson panel behind, floating on its own AND marked invisible,
-        # instead of tab-joining, even though each side's own docking code
-        # is individually correct in isolation. Self-heals for a while after
-        # startup: any window whose title still starts with "AZ Edu Lv2 - "
-        # but is still a plain floating entry (dump_workspace()'s flat tail,
-        # not nested under the tree at all) gets folded back in directly.
-        # dock_in_window silently no-ops on an invisible window (confirmed
-        # live) -- the lesson's own build_window() already sets visible=True
-        # right after construction, so forcing it back on here is just
-        # undoing whatever this race left behind, not fighting anything the
-        # lesson intended.
+        # 레슨의 deferred_dock_in("AZ Edu Lv2", ...)이 이 창이 이동 중일 때(플로팅 상태 또는 막 복원된 직후) 처리되면,
+        # 레슨 패널이 탭으로 붙지 못하고 숨김 상태로 혼자 떠 있는 경우가 가끔 있다(실측 확인. 양쪽 코드는 각각 정상).
+        # 그래서 시작 후 일정 시간 동안, 제목이 "AZ Edu Lv2 - "로 시작하는 플로팅 항목(dump_workspace()에서 트리 밖
+        # 뒷부분)을 찾아 다시 탭으로 붙인다. dock_in_window는 숨겨진 창에서 무시되므로(실측 확인) 표시를 다시 켠다.
+        # 레슨의 build_window()도 생성 직후 visible=True로 하므로 레슨 의도와 충돌하지 않는다.
         app = omni.kit.app.get_app()
         prefix = WINDOW_TITLE + " - "
         for _ in range(180):
@@ -430,14 +333,12 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
                         stray = ui.Workspace.get_window(title)
                         if stray is not None:
                             stray.visible = True
-                        # Re-fetched, not reused: confirmed live that toggling
-                        # visible on a just-created window can invalidate the
-                        # handle held from before that toggle.
+                        # 다시 가져온다: 막 생성된 창의 visible을 바꾸면 이전 핸들이 무효가 될 수 있다(실측 확인).
                         stray = ui.Workspace.get_window(title)
                         if stray is not None:
                             stray.dock_in_window(WINDOW_TITLE, ui.DockPosition.SAME, 1.0)
                     except AttributeError:
-                        pass  # transient handle state -- retried next frame
+                        pass  # 일시적인 핸들 상태, 다음 프레임에 재시도
             await app.next_update_async()
 
     def _on_button1_clicked(self):
@@ -447,9 +348,8 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
         self._activate_lesson(LESSON2_MODULE_NAME)
 
     async def _dock_with_lv1(self):
-        """The Lv1 launcher resets the layout and docks itself beside Stage as well. With both on, wait for it
-        and join its column as a tab instead of resetting the layout a second time (which would hide it).
-        False if it never docks (e.g. its window is closed): then the usual routine runs."""
+        """Lv1 런처도 레이아웃을 초기화하고 Stage 옆에 도킹한다. 둘 다 켜져 있으면 Lv1 도킹을 기다렸다가 그 열에 탭으로 붙는다
+        (레이아웃을 한 번 더 초기화하면 Lv1 창이 숨겨짐). 끝내 도킹되지 않으면(예: 창이 닫힘) False -> 기본 루틴 실행."""
         app = omni.kit.app.get_app()
         for _ in range(300):
             if self._window is None:
@@ -460,7 +360,7 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
             await app.next_update_async()
         else:
             return False
-        for _ in range(10):  # let Lv1 finish its own resizing first
+        for _ in range(10):  # Lv1의 크기 조정이 끝나길 기다림
             await app.next_update_async()
         for _ in range(10):
             if self._window is None:
@@ -480,11 +380,8 @@ class IsaacsimEduLv2Extension(omni.ext.IExt):
         for module in LV1_LESSON_MODULES:
             if manager.is_extension_enabled(module):
                 manager.set_extension_enabled_immediate(module, False)
-        # Always disable-then-enable the target too, even if it's already on:
-        # set_extension_enabled_immediate(..., True) is a no-op when the
-        # extension is already enabled, so re-clicking the same lesson's
-        # button would otherwise do nothing at all (no stage reload, no
-        # state reset) instead of restarting it cleanly.
+        # 대상 레슨도 이미 켜져 있든 아니든 껐다가 켠다. 켜진 상태에서 set_extension_enabled_immediate(..., True)는
+        # 아무 동작도 하지 않아, 같은 레슨 버튼을 다시 눌러도 재시작(씬 리로드, 상태 초기화)이 되지 않기 때문.
         manager.set_extension_enabled_immediate(target_module, False)
         if manager.set_extension_enabled_immediate(target_module, True):
             carb.settings.get_settings().set(SETTING_ACTIVE_LESSON, target_module)

@@ -69,8 +69,8 @@ def _hide_camera_manipulator_mesh(stage, camera_path):
         UsdGeom.Imageable(model_prim).GetPurposeAttr().Set(UsdGeom.Tokens.guide)
 
 
-# This lesson is a copy of Lv1's Lesson 3. Both register the forklift scene's Action Graph node types under the
-# same names (the scene files refer to them), so no Lv1 lesson stays on next to this one.
+# 이 레슨은 Lv1 Lesson 3 복사본이다. 둘 다 지게차 씬의 Action Graph 노드 타입을 같은 이름으로 등록하므로
+# (씬 파일이 그 이름을 참조), 이 레슨이 켜지면 Lv1 레슨은 모두 끈다.
 LV1_LESSON_MODULES = [
     "Isaacsim_Edu_Lv1_Lesson1",
     "Isaacsim_Edu_Lv1_Lesson2",
@@ -81,8 +81,8 @@ LV1_LESSON_MODULES = [
 
 SETTING_ACTIVE_LESSON = "/persistent/exts/Isaacsim_Edu_Lv2/active_lesson"
 
-# Lesson 2 (forklift AI) depends on this extension for the forklift's controls but opens its own copy of
-# the scene and its own panel; while it is enabled this lesson keeps only the controls.
+# Lesson 2(지게차 AI)는 지게차 조작을 이 익스텐션에 의존하지만 씬과 패널은 따로 연다.
+# Lesson 2가 켜져 있으면 이 레슨은 조작 기능만 유지한다.
 FORKLIFT_AI_MODULE = "Isaacsim_Edu_ForkliftAI"
 
 
@@ -105,7 +105,7 @@ class IsaacsimEduLv2Lesson1Extension(omni.ext.IExt):
         self._timeline_play_sub = timeline_events.create_subscription_to_pop_by_type(
             int(omni.timeline.TimelineEventType.PLAY), self._on_timeline_play
         )
-        # A copy of this scene opened later (e.g. by another lesson) gets its own spawn pose and cameras.
+        # 나중에 이 씬의 복사본을 열어도(예: 다른 레슨) 시작 자세와 카메라를 다시 잡는다.
         self._stage_open_sub = omni.usd.get_context().get_stage_event_stream().create_subscription_to_pop(
             self._on_stage_event, name="Isaacsim_Edu_Lv2_Lesson1 stage"
         )

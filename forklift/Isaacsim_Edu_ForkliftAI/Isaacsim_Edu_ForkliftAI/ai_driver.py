@@ -1,13 +1,11 @@
-"""AI driver: follows a learned route by pressing Lesson 1's control keys instead of the keyboard.
+"""AI 운전자: 키보드 대신 Lesson 1의 조작 키를 눌러 학습된 경로를 따라간다.
 
-Lesson 1's control nodes ask `forklift_omnigraph_nodes._is_key_down(stage, key_node)` every frame.
-While the AI drives, that function answers with the path follower's decision for the six driving
-keys (camera cycling still follows the real keyboard), so the forklift moves exactly as if a person
-held those keys. Nothing in Lesson 1 is modified on disk.
+Lesson 1의 제어 노드는 매 프레임 `forklift_omnigraph_nodes._is_key_down(stage, key_node)`를 호출한다.
+AI 운전 중에는 이 함수가 주행 키 6개에 대해 경로 추종기의 판단을 돌려준다(카메라 전환은 실제 키보드).
+그래서 사람이 키를 누른 것과 똑같이 움직이며, Lesson 1 파일은 수정하지 않는다.
 
-With a YOLO model, how far the pallet is (to know when the forks are all the way in) comes from the
-fork camera instead of the simulator: see PalletEyes. The simulator's pallet pose is then only used
-to score the run (did it end up on the shelf?).
+YOLO 모델이 있으면 파렛트까지 거리(포크가 끝까지 들어갔는지)를 시뮬레이터 대신 포크 카메라로 잰다(`PalletEyes`).
+이때 시뮬레이터의 파렛트 위치는 채점(선반에 올라갔는가)에만 쓴다.
 """
 
 from __future__ import annotations
@@ -28,16 +26,16 @@ KEY_OF_PATH = {
     fon.KEY_LIFT_UP_PATH: "lift_up", fon.KEY_LIFT_DOWN_PATH: "lift_down",
 }
 TIMEOUT_S = 180.0
-SETTLE_S = 1.5  # after the forks are out, give the pallet this long to come to rest before judging
-BACK_OUT_MAX_M = 1.5  # if the learned route ends with the forks still in the pallet, back straight out this much more
-LIFTED_M = 0.2  # forks this high: the pallet should be riding on them
-MAX_PALLET_TILT_DEG = 10.0  # leaning more than this on lifted forks = hanging off the fork tips
+SETTLE_S = 1.5  # 포크가 빠진 뒤 파렛트가 멈출 때까지 기다렸다가 판정
+BACK_OUT_MAX_M = 1.5  # 학습 경로가 끝나도 포크가 파렛트 안에 있으면 최대 이만큼 더 똑바로 후진
+LIFTED_M = 0.2  # 포크가 이 높이 이상이면 파렛트가 포크에 실려 있어야 함
+MAX_PALLET_TILT_DEG = 10.0  # 들린 포크 위에서 이보다 더 기울면 포크 끝에 걸쳐 있는 것
 
 
 def start_overlap(stage, x, y, yaw_deg, lift):
-    """Why the forklift cannot start at this pose because it already overlaps something (Korean, for the
-    panel), or None. Racks, pillars and other fixed objects: Lesson 1's own test, which asks the physics
-    scene -- only while the simulation runs. The pallet (a moving body that test lets through): its outline."""
+    """이 자세에서 이미 무언가와 겹쳐 출발할 수 없는 이유(패널용 한국어 문구), 없으면 None.
+    선반·기둥 등 고정 물체는 Lesson 1의 충돌 검사로 판단(물리 scene에 묻기 때문에 시뮬레이션 중에만 동작).
+    그 검사가 통과시키는 파렛트(움직이는 물체)는 외곽선으로 판단한다."""
     if fon._pose_blocked(stage, x, y, math.radians(yaw_deg), lift):
         what = "선반·기둥 같은 다른 물체"
     else:
@@ -49,20 +47,18 @@ def start_overlap(stage, x, y, yaw_deg, lift):
 
 
 class PalletEyes:
-    """YOLO on the fork camera -> where the pallet stands, while driving into it.
+    """파렛트로 들어가는 동안 포크 카메라의 YOLO로 파렛트 위치를 잰다.
 
-    While the pallet's bottom edge is in view (more than ~2.4 m away) each detection gives a distance
-    (learned table), turned into a floor position with the forklift's own pose; the median of the
-    latest ones is kept. Closer than that the bottom edge leaves the image, and the distance is
-    counted down from the forklift's own motion. If the pallet slides away (pushed), its bottom edge
-    shows again: a measurement that disagrees with the kept position by more than MOVED_M means the
-    pallet moved, so the old measurements are dropped and it is measured afresh.
+    파렛트 아랫변이 보이는 동안(약 2.4 m 이상) 검출마다 거리표로 거리를 구해 지게차 자세로 바닥 위치로 바꾸고,
+    최근 값들의 중앙값을 유지한다. 더 가까우면 아랫변이 화면 밖으로 나가므로 지게차 자신의 이동량으로 거리를 줄여 나간다.
+    파렛트가 밀려나면 아랫변이 다시 보이는데, 유지 중인 위치와 `MOVED_M` 넘게 차이 나면 파렛트가 움직인 것으로 보고
+    이전 측정을 버린 뒤 새로 잰다.
     """
 
-    EVERY_S = 0.2  # 5 detections per second
+    EVERY_S = 0.2  # 초당 5회 검출
     KEEP = 5
-    MAX_LIFT_M = 0.15  # the table was learned with the forks (and the camera) down
-    MOVED_M = 0.25  # the distance table's own spread is about +-0.2 m at 2.5-3 m
+    MAX_LIFT_M = 0.15  # 거리표는 포크(와 카메라)를 내린 상태로 학습했음
+    MOVED_M = 0.25  # 거리표 자체의 오차가 2.5-3 m에서 약 +-0.2 m
 
     def __init__(self, model_path, table):
         self.detector = V.Detector(model_path)
@@ -77,7 +73,7 @@ class PalletEyes:
         self.last_box = None
         self.last_estimate = None
         self.detections = 0
-        self.history = []  # (sim time, box bottom or None, distance measured or None) for diagnosis
+        self.history = []  # 진단용 (sim time, 박스 아랫변 또는 None, 측정 거리 또는 None)
 
     def attach(self, stage):
         import omni.replicator.core as rep
@@ -111,7 +107,7 @@ class PalletEyes:
         bottom = None if box is None else round(box[2] + box[4] / 2, 3)
         if box is None or bottom >= V.CLIPPED_BOTTOM:
             self.history.append((round(sim_time, 2), bottom, None))
-            return  # too close to measure: keep counting down from the last measurement
+            return  # 너무 가까워 측정 불가: 마지막 측정값에서 계속 줄여 나감
         est = V.estimate_ahead(box, self.table)
         self.history.append((round(sim_time, 2), bottom, None if est is None else round(est, 2)))
         if est is None:
@@ -120,7 +116,7 @@ class PalletEyes:
         yr = math.radians(yaw_deg)
         new = (x + math.sin(yr) * est, y - math.cos(yr) * est)
         if self.spot is not None and math.dist(new, self.spot) > self.MOVED_M:
-            self._spots = []  # the pallet moved (pushed along by the forks): measure it afresh
+            self._spots = []  # 파렛트가 움직임(포크에 밀림): 새로 측정
         self._spots = (self._spots + [new])[-self.KEEP:]
         self.spot = tuple(float(v) for v in np.median(np.array(self._spots), axis=0))
 
@@ -132,24 +128,23 @@ class PalletEyes:
 
 class AIDriver:
     def __init__(self, paths_file, model_path=None, blind=False, reposition=False):
-        """model_path: the YOLO model (the AI's eyes); without it the simulator's true pallet distance is
-        used -- or, if `blind`, none at all (the forks go in as far as the person's route and lift there).
-        A model that cannot be used (no distance table in paths.json) counts as blind too."""
+        """model_path: YOLO 모델(AI의 눈). 없으면 시뮬레이터의 실제 파렛트 거리를 쓰고, `blind`이면 거리를 쓰지 않는다
+        (사람 경로만큼 포크를 넣고 거기서 들어 올림). 쓸 수 없는 모델(`paths.json`에 거리표 없음)도 blind로 취급."""
         self.paths = P.load(paths_file)
         use_eyes = model_path and self.paths.get("vision")
         self.eyes = PalletEyes(model_path, self.paths["vision"]) if use_eyes else None
         self.blind = blind or (model_path is not None and self.eyes is None)
-        self.seat_check = None  # (true distance, distance the AI used) when it lifted the pallet
+        self.seat_check = None  # 파렛트를 들어 올린 순간의 (실제 거리, AI가 쓴 거리)
         self._k_seen = None
         self._pose = None
         self.active = False
         self.keys = {k: False for k in P.KEYS}
         self.follower = None
         self.plan_text = ""
-        self.move = None  # a short repositioning move driven before the route (see plan)
+        self.move = None  # 경로 전에 운전하는 짧은 자리 이동 (plan 참고)
         self.move_text = ""
         self._repositions = 0
-        self._max_repositions = P.APPROACH_MAX_STEPS if reposition else 0  # the panel's '자리 고쳐 잡기'
+        self._max_repositions = P.APPROACH_MAX_STEPS if reposition else 0  # 패널의 '자리 고쳐 잡기'
         self._orig = None
         self._t_last = None
         self._t0 = None
@@ -158,12 +153,11 @@ class AIDriver:
         self.tilt_deg = None
 
     def plan(self, stage, x, y, yaw_deg):
-        """Rehearse every learned route from this pose and keep the best one that does not run into
-        anything (Lesson 1's own collision test, plus the pallet, which that test lets the forklift
-        push). False if none gets through. Needs the simulation running: the collision test asks the
-        physics scene. With '자리 고쳐 잡기' it only takes a quick look (the nearest demonstrations); no route ->
-        drive a short move toward where the demonstrations started (paths.approach_move) and look again from
-        where it really ended, step by step; a full look only once no move gets it any closer."""
+        """이 자세에서 학습된 경로를 모두 리허설해, 아무것도 들이받지 않는 경로 중 가장 좋은 것을 고른다
+        (Lesson 1의 충돌 검사 + 그 검사가 밀고 가도록 허용하는 파렛트). 통과하는 경로가 없으면 False.
+        충돌 검사가 물리 scene에 묻기 때문에 시뮬레이션 실행 중이어야 한다.
+        '자리 고쳐 잡기'를 켜면 가까운 시연만 빠르게 본다. 경로가 없으면 시연 출발점 쪽으로 짧게 이동하고
+        (`paths.approach_move`) 실제로 멈춘 곳에서 다시 본다. 더 가까워지는 이동이 없을 때만 전체를 탐색한다."""
         px, py, _pz, pyaw = pallet_pose(stage)
         pallet = (px, py, pyaw)
 
@@ -171,7 +165,7 @@ class AIDriver:
             return fon._refuse_pose(stage, (old[0], old[1], math.radians(old[2]), old[3]),
                                     (new[0], new[1], math.radians(new[2]), new[3]))
 
-        if self._max_repositions:  # think briefly first
+        if self._max_repositions:  # 먼저 짧게 탐색
             demo, la, miss, tried, rejected = P.plan(self.paths, x, y, yaw_deg, blocked, pallet=pallet,
                                                      nearest=P.QUICK_DEMOS, lookaheads=P.QUICK_LOOKAHEADS_M)
         else:
@@ -180,14 +174,14 @@ class AIDriver:
             self.follower = None
             if self._repositions < self._max_repositions:
                 found = P.approach_move(self.paths, x, y, yaw_deg, blocked, pallet, collides=self._collides(stage))
-                if found is not None:  # move a little toward where the demonstrations started, then think again
+                if found is not None:  # 시연 출발점 쪽으로 조금 이동한 뒤 다시 탐색
                     self._repositions += 1
                     self.move = P.MoveDriver(found[0])
                     self.move_text = P.describe_move(found[0])
                     self.plan_text = (f"바로 갈 수 있는 경로가 없어 녹화 출발점 쪽으로 조금 움직입니다 "
                                       f"({self._repositions}/{self._max_repositions}번째: {self.move_text}). 움직인 뒤 다시 생각합니다.")
                     return True
-            # no move gets it any closer: one full look from here before giving up
+            # 더 가까워지는 이동이 없음: 포기 전에 여기서 한 번 전체 탐색
             demo, la, miss, tried, rejected = P.plan(self.paths, x, y, yaw_deg, blocked, pallet=pallet)
         hit = f", 부딪히는 {rejected}가지 제외" if rejected else ""
         if demo is None:
@@ -210,12 +204,12 @@ class AIDriver:
 
     @staticmethod
     def _collides(stage):
-        """Lesson 1's own test: would the forklift at this pose (x, y, yaw_deg, lift) touch a rack or pillar?"""
+        """Lesson 1의 충돌 검사: 이 자세(x, y, yaw_deg, lift)의 지게차가 선반·기둥에 닿는가?"""
         return lambda x, y, yaw_deg, lift: fon._pose_blocked(stage, x, y, math.radians(yaw_deg), lift)
 
     def check_start(self, stage, x, y, yaw_deg, lift):
-        """Why the AI cannot set off from here (Korean, for the panel), or None: touching a rack, pillar or the
-        pallet already. A start behind the target rack is left to plan(): it goes if a learned route gets round."""
+        """AI가 여기서 출발할 수 없는 이유(패널용 한국어), 없으면 None: 이미 선반·기둥·파렛트에 닿아 있는 경우.
+        목표 선반 뒤쪽 출발은 plan()에 맡긴다: 돌아갈 수 있는 학습 경로가 있으면 출발."""
         return start_overlap(stage, x, y, yaw_deg, lift)
 
     def start(self, sim_time):
@@ -253,18 +247,18 @@ class AIDriver:
         return self._orig(stage, node_path) if self._orig else False
 
     def update(self, stage, sim_time):
-        """Decide keys every frame. Returns 'success' / 'stuck' / 'missed' / 'timeout' when over, else None."""
+        """매 프레임 누를 키를 정한다. 끝나면 'success' / 'stuck' / 'missed' / 'timeout' 등, 아니면 None."""
         if not self.active:
             return None
         dt = 0.0 if self._t_last is None else max(sim_time - self._t_last, 0.0)
         self._t_last = sim_time
         s = forklift_state(stage)
-        if self.move is not None:  # repositioning first (no route from where it started)
+        if self.move is not None:  # 자리 이동 먼저 (출발 위치에서 갈 경로가 없었음)
             self.keys = self.move.step(s["x"], s["y"], fon._current_speed_mps)
             if self.move.done:
                 self.move = None
                 self.keys = {k: False for k in P.KEYS}
-                if not self.plan(stage, s["x"], s["y"], s["yaw_deg"]):  # from where the move really ended
+                if not self.plan(stage, s["x"], s["y"], s["yaw_deg"]):  # 이동이 실제로 끝난 위치에서
                     self.result = "no_route"
             if self.result is None and sim_time - self._t0 > TIMEOUT_S:
                 self.result = "timeout"
@@ -275,7 +269,7 @@ class AIDriver:
         inserting = f.k == f.demo.get("insert_segment") and f.mode == "drive"
         if self.eyes is not None:
             if f.k != self._k_seen and inserting:
-                self.eyes.reset()  # a fresh look at the pallet for the drive in
+                self.eyes.reset()  # 파렛트로 들어가기 전에 새로 측정
             if inserting:
                 self.eyes.look(sim_time, s["x"], s["y"], s["yaw_deg"], s["lift_m"])
             ahead = self.eyes.ahead(s["x"], s["y"], s["yaw_deg"])
@@ -289,23 +283,23 @@ class AIDriver:
         if (self.seat_check is None and k_before == f.demo.get("insert_segment")
                 and mode_before == "drive" and f.mode == "settle"):
             self.seat_check = (round(true_ahead, 3), None if ahead is None else round(ahead, 3))
-        # Referee, not the AI's senses (like the on-shelf judgement below): once the forks have lifted it, the
-        # pallet must ride level on them. Hanging off the fork tips it would be dragged into the rack -- stop.
+        # AI의 감각이 아닌 심판 판정(아래 선반 판정과 같음): 들어 올린 뒤 파렛트는 포크 위에 수평으로 실려야 한다.
+        # 포크 끝에 걸쳐 있으면 선반 쪽으로 끌려가므로 멈춘다.
         if (not f.done and f.k >= (f.demo.get("insert_segment") or 0) and s["lift_m"] > LIFTED_M):
             tilt = pallet_tilt_deg(stage)
             if tilt > MAX_PALLET_TILT_DEG:
                 self.tilt_deg = tilt
                 self.result = "tilted"
                 return self.result
-        # Judged only once the whole learned route is driven, the forks are completely out of the pallet
-        # and the pallet has had a moment to settle -- never in the middle of placing it.
+        # 학습 경로를 끝까지 운전하고, 포크가 파렛트에서 완전히 빠지고, 파렛트가 잠시 안정된 뒤에만 판정
+        # (내려놓는 도중에는 판정하지 않음).
         forks_out = math.hypot(px - s["x"], py - s["y"]) > FORKS_CLEAR_M
         if f.done:
             if self._back_from is None:
                 self._back_from = (s["x"], s["y"])
             backed = math.hypot(s["x"] - self._back_from[0], s["y"] - self._back_from[1])
             if not forks_out and backed < BACK_OUT_MAX_M:
-                self.keys = {k: k == "backward" for k in P.KEYS}  # forks still in: straight back
+                self.keys = {k: k == "backward" for k in P.KEYS}  # 포크가 아직 안에 있음: 똑바로 후진
                 self._t_done = None
             elif self._t_done is None:
                 self._t_done = sim_time

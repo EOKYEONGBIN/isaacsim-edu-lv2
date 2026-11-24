@@ -1,15 +1,15 @@
-"""Turn recorded forklift demonstrations into a YOLO detection dataset.
+"""녹화한 지게차 시연으로 YOLO 검출 데이터셋을 만듭니다.
 
-    python make_yolo_dataset.py                      (defaults below)
+    python make_yolo_dataset.py                      (기본값 사용)
     python make_yolo_dataset.py --demos D:\\demos --out D:\\yolo_dataset --val 0.2
 
-Reads demo_*/images/*.png + demo_*/labels/*.txt written by the Forklift AI recorder and creates
+Forklift AI 녹화기가 저장한 demo_*/images/*.png + demo_*/labels/*.txt를 읽어 다음을 만듭니다.
 
     <out>/images/train, images/val, labels/train, labels/val, data.yaml
 
-Validation images come from whole demonstrations (not random frames), so the model is checked on
-drives it never saw -- neighbouring frames of one drive look almost the same. With a single
-demonstration, every 5th frame is used instead. Standard library only.
+검증 이미지는 임의 프레임이 아니라 시연 단위로 떼어 냅니다. 한 주행의 인접 프레임은 거의 같아서,
+본 적 없는 주행으로 검증해야 하기 때문입니다. 시연이 하나뿐이면 5프레임마다 하나를 검증용으로 씁니다.
+표준 라이브러리만 사용합니다.
 """
 
 import argparse
@@ -18,7 +18,7 @@ import random
 import shutil
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[4]  # the folder that holds isaacsim-edu-lv2 (training VM: E:\omniverse\content)
+ROOT = Path(__file__).resolve().parents[4]  # isaacsim-edu-lv2를 담고 있는 폴더 (교육용 VM: E:\omniverse\content)
 DEFAULT_DEMOS = ROOT / "forklift_ai" / "demos"
 DEFAULT_OUT = ROOT / "forklift_ai" / "yolo_dataset"
 CLASSES = ["pallet", "rack_level2"]
