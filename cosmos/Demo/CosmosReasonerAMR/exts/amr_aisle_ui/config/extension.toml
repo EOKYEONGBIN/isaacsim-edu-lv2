@@ -1,0 +1,16 @@
+[package]
+version = "0.1.0"
+title = "Cosmos Reasoner AMR"
+description = "AMR front camera -> Cosmos3 Nano Reasoner decides if an aisle is pass or reroute."
+category = "Robotics"
+keywords = ["amr", "cosmos", "reasoner", "warehouse", "aisle"]
+authors = ["azwell"]
+
+[dependencies]
+"omni.ui" = {}
+"omni.usd" = {}
+"omni.replicator.core" = {}
+"omni.kit.viewport.utility" = {}
+
+[[python.module]]
+name = "amr_aisle_ui"
