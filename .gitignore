@@ -3,12 +3,7 @@ __pycache__/
 *.log
 
 # data and trained models live outside this repository (<folder holding this repo>\forklift_ai, training VM: E:\omniverse\content\forklift_ai) -- never commit them
-*.usd
-*.usda
-*.usdc
-*.png
 !*/data/icon.png
-*.jpg
 *.pt
 *.onnx
 *.zip
